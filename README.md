@@ -1,4 +1,4 @@
-# React App
+# JustWav3
 
 A modern React.js application built with Vite and TypeScript.
 
@@ -51,7 +51,7 @@ npm run preview
 ## Project Structure
 
 ```
-ReactNativeApp/
+JustWav3/
 ├── public/          # Static assets
 ├── src/            # Source files
 │   ├── App.tsx     # Main App component

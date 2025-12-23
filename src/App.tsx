@@ -7,8 +7,8 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>React App</h1>
-        <p>Welcome to your React.js application</p>
+        <h1>JustWav3</h1>
+        <p>Welcome to JustWav3</p>
       </header>
       <main className="app-main">
         <div className="card">
