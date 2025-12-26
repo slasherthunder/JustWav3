@@ -1,27 +1,62 @@
-import { useState } from 'react'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
+import { AuthProvider } from './contexts/AuthContext';
+import { NavigationProvider, useNavigation } from './contexts/NavigationContext';
+import { PrivateRoute } from './components/PrivateRoute';
+import { Login } from './components/Login';
+import { Signup } from './components/Signup';
+import { Home } from './pages/Home';
+import { PageTransition } from './components/PageTransition';
+import { Learn } from './pages/Learn';
+import { Loading } from './components/Loading';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+function AnimatedRoutes() {
+  const location = useLocation();
+  const { isNavigating } = useNavigation();
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>JustWav3</h1>
-        <p>Welcome to JustWav3</p>
-      </header>
-      <main className="app-main">
-        <div className="card">
-          <button onClick={() => setCount((count) => count + 1)}>
-            Count is {count}
-          </button>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test HMR
-          </p>
-        </div>
-      </main>
-    </div>
-  )
+    <>
+      {isNavigating && <Loading />}
+      <PageTransition>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <Home />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/learn"
+            element={
+              <PrivateRoute>
+                <Learn />
+              </PrivateRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </AnimatePresence>
+      </PageTransition>
+    </>
+  );
 }
 
-export default App
+function App() {
+  return (
+    <Router>
+      <NavigationProvider>
+        <AuthProvider>
+          <AnimatedRoutes />
+        </AuthProvider>
+      </NavigationProvider>
+    </Router>
+  );
+}
+
+export default App;
