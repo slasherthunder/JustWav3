@@ -5,13 +5,15 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendEmailVerification,
+  reload,
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { Loading } from '../components/Loading';
 
-export type UserRole = 'parent' | 'student' | null;
+export type UserRole = 'parent' | 'student' | 'teacher' | null;
 
 interface AuthContextType {
   currentUser: User | null;
@@ -19,6 +21,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
+  sendVerificationEmail: () => Promise<void>;
   loading: boolean;
 }
 
@@ -41,11 +44,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
+    // Send email verification
+    try {
+      console.log('Sending verification email to:', user.email);
+      await sendEmailVerification(user, {
+        url: window.location.origin,
+        handleCodeInApp: false,
+      });
+      console.log('Verification email sent successfully');
+    } catch (error: any) {
+      console.error('Error sending verification email:', error);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
+      // Don't throw here - account creation succeeded, just email sending failed
+      // But we'll log it so user can see in console
+    }
+
     if (user && role) {
       const payload = {
         email: user.email,
         role: role,
         createdAt: new Date().toISOString(),
+        emailVerified: false,
       };
 
       let attempt = 0;
@@ -68,6 +88,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function sendVerificationEmail() {
+    if (!currentUser) {
+      throw new Error('No user logged in');
+    }
+    if (currentUser.emailVerified) {
+      throw new Error('Email already verified');
+    }
+    console.log('Resending verification email to:', currentUser.email);
+    await sendEmailVerification(currentUser, {
+      url: window.location.origin,
+      handleCodeInApp: false,
+    });
+    console.log('Verification email resent successfully');
+  }
+
   async function login(email: string, password: string) {
     await signInWithEmailAndPassword(auth, email, password);
   }
@@ -82,6 +117,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCurrentUser(user);
       
       if (user) {
+        // Reload user to get latest email verification status (e.g., if verified in another tab)
+        // Only reload if email is not verified to avoid unnecessary API calls
+        if (!user.emailVerified) {
+          try {
+            await reload(user);
+            // Get fresh user after reload
+            const updatedUser = auth.currentUser;
+            if (updatedUser) {
+              setCurrentUser(updatedUser);
+            }
+          } catch (error) {
+            // Ignore reload errors - user data is still valid
+            console.error('Error reloading user:', error);
+          }
+        }
+        
         // Fetch user role from Firestore
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -111,6 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     signup,
     logout,
+    sendVerificationEmail,
     loading,
   };
 

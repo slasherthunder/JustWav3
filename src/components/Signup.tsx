@@ -24,7 +24,12 @@ export function Signup() {
   const [emailPrefix, setEmailPrefix] = useState('');
   const [passwordIcons, setPasswordIcons] = useState<string[]>([]);
   const [confirmPasswordIcons, setConfirmPasswordIcons] = useState<string[]>([]);
-  const [userRole, setUserRole] = useState<'parent' | 'student' | null>(null);
+  const [normalPassword, setNormalPassword] = useState('');
+  const [confirmNormalPassword, setConfirmNormalPassword] = useState('');
+  const [useNormalPassword, setUseNormalPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [userRole, setUserRole] = useState<'parent' | 'student' | 'teacher' | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailValid, setEmailValid] = useState<boolean | null>(null);
@@ -75,38 +80,57 @@ export function Signup() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    if (passwordIcons.length < 3) {
-      return setError('Please choose 3 icons for your password! 🌟');
-    }
-
-    if (passwordIcons.join('-') !== confirmPasswordIcons.join('-')) {
-      return setError("Icons don't match. Try again! 💪");
+    setError('');
+    setLoading(true);
+    
+    let passwordToUse = '';
+    if (useNormalPassword) {
+      if (!normalPassword || normalPassword.length < 6) {
+        setLoading(false);
+        return setError('Normal password must be at least 6 characters long! 🔑');
+      }
+      if (normalPassword !== confirmNormalPassword) {
+        setLoading(false);
+        return setError("Passwords don't match. Try again! 💪");
+      }
+      passwordToUse = normalPassword;
+    } else {
+      if (passwordIcons.length < 3) {
+        setLoading(false);
+        return setError('Please choose 3 icons for your password! 🌟');
+      }
+      if (passwordIcons.join('-') !== confirmPasswordIcons.join('-')) {
+        setLoading(false);
+        return setError("Icons don't match. Try again! 💪");
+      }
+      passwordToUse = iconsToPassword(passwordIcons, email);
     }
 
     if (!email || !email.includes('@')) {
+      setLoading(false);
       return setError('Please enter your email! 📧');
     }
 
     if (!userRole) {
-      return setError('Please choose if you are a parent or student! 👨‍👩‍👧‍👦');
+      setLoading(false);
+      return setError('Please choose if you are a parent, student, or teacher! 👨‍👩‍👧‍👦');
     }
 
-    // Allow any icon selection as long as both entries match
-
     try {
+      await signup(email, passwordToUse, userRole);
+      // Show success message about email verification
       setError('');
-      setLoading(true);
-      // Convert icons to password string with email for uniqueness
-      const password = iconsToPassword(passwordIcons, email);
-      await signup(email, password, userRole);
+      setLoading(false);
+      // Don't navigate immediately - show verification message
+      const verificationMessage = `✅ Account created successfully!\n\nPlease check your email (${email}) to verify your account.\n\n📧 We've sent a verification link to your inbox.\n\n⚠️ If you don't see it, please check your spam/junk folder.\n\nYou can also resend the verification email from your home page.`;
+      alert(verificationMessage);
       setNavigating(true);
-      navigate('/');
+      navigate('/home');
     } catch (err: unknown) {
       if (err instanceof FirebaseError) {
         if (err.code === 'auth/email-already-in-use') {
           try {
-            const password = iconsToPassword(passwordIcons, email);
-            await login(email, password);
+            await login(email, passwordToUse);
             if (auth.currentUser && userRole) {
               await setDoc(doc(db, 'users', auth.currentUser.uid), {
                 email: auth.currentUser.email,
@@ -115,7 +139,7 @@ export function Signup() {
               }, { merge: true });
             }
             setNavigating(true);
-            navigate('/');
+            navigate('/home');
             return;
           } catch {
             setError('Account exists. Try logging in with your icons.');
@@ -313,91 +337,222 @@ export function Signup() {
                   </motion.span>
                 )}
               </motion.button>
+              <motion.button
+                type="button"
+                className={`role-button ${userRole === 'teacher' ? 'selected' : ''}`}
+                onClick={() => setUserRole('teacher')}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                aria-label="I am a teacher"
+              >
+                <span className="role-icon">👩‍🏫</span>
+                <span className="role-text">Teacher</span>
+                {userRole === 'teacher' && (
+                  <motion.span
+                    className="role-check"
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                  >
+                    ✅
+                  </motion.span>
+                )}
+              </motion.button>
             </div>
           </motion.div>
 
           <motion.div variants={itemVariants}>
-            <IconPasswordSelector
-              selectedIcons={passwordIcons}
-              onIconSelect={(icon) => {
-                if (passwordIcons.length < 3) {
-                  const newIcons = [...passwordIcons, icon];
-                  handlePasswordIconsChange(newIcons);
-                }
-              }}
-              maxIcons={3}
-              label="Create Your Password"
-            />
-            {passwordUnique && (
-              <motion.div
-                className="password-unique-badge"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-              >
-                <span className="unique-icon">🔒</span>
-                <span>Your password is unique and secure!</span>
-              </motion.div>
-            )}
-            {passwordIcons.length > 0 && (
-              <motion.button
+            <div className="password-mode-toggle">
+              <button
                 type="button"
-                className="clear-icons-button"
+                className={`password-mode-button ${!useNormalPassword ? 'active' : ''}`}
                 onClick={() => {
-                  setPasswordIcons([]);
-                  setPasswordUnique(null);
+                  setUseNormalPassword(false);
+                  setNormalPassword('');
+                  setConfirmNormalPassword('');
+                  setError('');
                 }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                aria-label="Use icon password"
               >
-                Clear and Start Over 🔄
-              </motion.button>
+                🎨 Icon Password
+              </button>
+              <button
+                type="button"
+                className={`password-mode-button ${useNormalPassword ? 'active' : ''}`}
+                onClick={() => {
+                  setUseNormalPassword(true);
+                  setPasswordIcons([]);
+                  setConfirmPasswordIcons([]);
+                  setPasswordUnique(null);
+                  setError('');
+                }}
+                aria-label="Use normal password"
+              >
+                🔒 Normal Password
+              </button>
+            </div>
+
+            {!useNormalPassword ? (
+              <>
+                <IconPasswordSelector
+                  selectedIcons={passwordIcons}
+                  onIconSelect={(icon) => {
+                    if (passwordIcons.length < 3) {
+                      const newIcons = [...passwordIcons, icon];
+                      handlePasswordIconsChange(newIcons);
+                    }
+                  }}
+                  maxIcons={3}
+                  label="Create Your Password"
+                />
+                {passwordUnique && (
+                  <motion.div
+                    className="password-unique-badge"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <span className="unique-icon">🔒</span>
+                    <span>Your password is unique and secure!</span>
+                  </motion.div>
+                )}
+                {passwordIcons.length > 0 && (
+                  <motion.button
+                    type="button"
+                    className="clear-icons-button"
+                    onClick={() => {
+                      setPasswordIcons([]);
+                      setPasswordUnique(null);
+                    }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Clear and Start Over 🔄
+                  </motion.button>
+                )}
+              </>
+            ) : (
+              <div className="form-group child-friendly-group">
+                <label htmlFor="normal-password" className="label-with-icon">
+                  <span className="label-icon">🔒</span>
+                  Create Your Password
+                </label>
+                <div className="input-wrapper">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="normal-password"
+                    value={normalPassword}
+                    onChange={(e) => setNormalPassword(e.target.value)}
+                    placeholder="Enter your password (min 6 characters)"
+                    className="form-group input"
+                    aria-label="Password input"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
             )}
           </motion.div>
 
           <motion.div variants={itemVariants}>
-            <IconPasswordSelector
-              selectedIcons={confirmPasswordIcons}
-              onIconSelect={(icon) => {
-                if (confirmPasswordIcons.length < 3) {
-                  setConfirmPasswordIcons([...confirmPasswordIcons, icon]);
-                }
-              }}
-              maxIcons={3}
-              label="Type Your Password Again"
-            />
-            {confirmPasswordIcons.length > 0 && (
-              <motion.button
-                type="button"
-                className="clear-icons-button"
-                onClick={() => setConfirmPasswordIcons([])}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Clear and Start Over 🔄
-              </motion.button>
-            )}
-            {passwordIcons.length === 3 && confirmPasswordIcons.length === 3 && (
-              <motion.div
-                className="password-match-check"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-              >
-                {passwordIcons.join('-') === confirmPasswordIcons.join('-') ? (
-                  <span className="match-success">✅ Passwords match! Great job!</span>
-                ) : (
-                  <span className="match-error">❌ Icons don't match. Try again!</span>
+            {!useNormalPassword ? (
+              <>
+                <IconPasswordSelector
+                  selectedIcons={confirmPasswordIcons}
+                  onIconSelect={(icon) => {
+                    if (confirmPasswordIcons.length < 3) {
+                      setConfirmPasswordIcons([...confirmPasswordIcons, icon]);
+                    }
+                  }}
+                  maxIcons={3}
+                  label="Type Your Password Again"
+                />
+                {confirmPasswordIcons.length > 0 && (
+                  <motion.button
+                    type="button"
+                    className="clear-icons-button"
+                    onClick={() => setConfirmPasswordIcons([])}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Clear and Start Over 🔄
+                  </motion.button>
                 )}
-              </motion.div>
+                {passwordIcons.length === 3 && confirmPasswordIcons.length === 3 && (
+                  <motion.div
+                    className="password-match-check"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    {passwordIcons.join('-') === confirmPasswordIcons.join('-') ? (
+                      <span className="match-success">✅ Passwords match! Great job!</span>
+                    ) : (
+                      <span className="match-error">❌ Icons don't match. Try again!</span>
+                    )}
+                  </motion.div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="form-group child-friendly-group">
+                  <label htmlFor="confirm-normal-password" className="label-with-icon">
+                    <span className="label-icon">🔒</span>
+                    Type Your Password Again
+                  </label>
+                  <div className="input-wrapper">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      id="confirm-normal-password"
+                      value={confirmNormalPassword}
+                      onChange={(e) => setConfirmNormalPassword(e.target.value)}
+                      placeholder="Confirm your password"
+                      className="form-group input"
+                      aria-label="Confirm password input"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                </div>
+                {normalPassword && confirmNormalPassword && (
+                  <motion.div
+                    className="password-match-check"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    {normalPassword === confirmNormalPassword ? (
+                      <span className="match-success">✅ Passwords match! Great job!</span>
+                    ) : (
+                      <span className="match-error">❌ Passwords don't match. Try again!</span>
+                    )}
+                  </motion.div>
+                )}
+              </>
             )}
           </motion.div>
 
           <motion.button
             type="submit"
-            disabled={loading || !email || passwordIcons.length < 3 || confirmPasswordIcons.length < 3 || passwordIcons.join('-') !== confirmPasswordIcons.join('-')}
+            disabled={
+              loading || 
+              !email || 
+              !userRole ||
+              (!useNormalPassword && (passwordIcons.length < 3 || confirmPasswordIcons.length < 3 || passwordIcons.join('-') !== confirmPasswordIcons.join('-'))) ||
+              (useNormalPassword && (!normalPassword || normalPassword.length < 6 || normalPassword !== confirmNormalPassword))
+            }
             className="auth-button child-friendly-button"
             aria-busy={loading}
             aria-label={loading ? 'Creating account, please wait' : 'Create your account'}

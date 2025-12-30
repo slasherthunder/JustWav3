@@ -1,6 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { ParentHome } from './ParentHome';
 import { StudentHome } from './StudentHome';
+import { TeacherHome } from './TeacherHome';
 import { Loading } from '../components/Loading';
 
 export function Home() {
@@ -16,6 +17,10 @@ export function Home() {
 
   if (userRole === 'student') {
     return <StudentHome />;
+  }
+
+  if (userRole === 'teacher') {
+    return <TeacherHome />;
   }
 
   // Fallback if role is not set

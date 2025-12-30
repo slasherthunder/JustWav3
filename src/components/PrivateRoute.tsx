@@ -9,6 +9,6 @@ export function PrivateRoute({ children }: { children: ReactNode }) {
     return <div>Loading...</div>;
   }
 
-  return currentUser ? <>{children}</> : <Navigate to="/login" />;
+  return currentUser ? <>{children}</> : <Navigate to="/" />;
 }
 

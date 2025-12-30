@@ -1,0 +1,103 @@
+.email-verification-banner {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+  border: 2px solid #ffc107;
+  border-radius: 12px;
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.verification-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.verification-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.verification-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.verification-text h4 {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: calc(var(--font-size-lg) * var(--text-size-multiplier));
+  color: var(--text-color);
+  font-weight: 700;
+}
+
+.verification-text p {
+  margin: 0;
+  font-size: calc(var(--font-size-base) * var(--text-size-multiplier));
+  color: var(--text-secondary);
+  line-height: var(--line-height);
+}
+
+.verification-text strong {
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
+.verification-success {
+  color: var(--success-color) !important;
+  font-weight: 600;
+  margin-top: var(--spacing-xs) !important;
+}
+
+.verification-error {
+  color: var(--error-color) !important;
+  font-weight: 600;
+  margin-top: var(--spacing-xs) !important;
+}
+
+.resend-verification-button {
+  padding: 12px 24px;
+  background: var(--primary-color);
+  color: var(--color-white);
+  border: none;
+  border-radius: 8px;
+  font-size: calc(var(--font-size-base) * var(--text-size-multiplier));
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.resend-verification-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.resend-verification-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.resend-verification-button:focus-visible {
+  outline: 3px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .verification-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .verification-icon {
+    align-self: center;
+  }
+
+  .resend-verification-button {
+    width: 100%;
+  }
+}
+

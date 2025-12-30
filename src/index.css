@@ -1,20 +1,59 @@
 :root {
-  /* Accessibility-focused color palette - High contrast */
-  --primary-color: #0066cc;
+  /* Disability Pride Flag Color Palette */
+  /* Red - Physical Disabilities */
+  --disability-red: #E60012;
+  /* Gold/Yellow - Cognitive/Intellectual Disabilities */
+  --disability-gold: #FFB81C;
+  /* Green - Sensory */
+  --disability-green: #00843D;
+  /* Blue - Psychiatric */
+  --disability-blue: #0066CC;
+  /* White - Invisible/Undiagnosed */
+  --disability-white: #FFFFFF;
+  /* Orange - Developmental Disabilities */
+  --disability-orange: #FF8C00;
+  /* Charcoal Gray - Diverse world of disability background */
+  --disability-charcoal: #58595B;
+  --disability-charcoal-light: #6B6C6E;
+  --disability-charcoal-dark: #3D3E40;
+  
+  /* Primary colors using Disability Pride palette */
+  --primary-color: var(--disability-blue);
   --primary-hover: #0052a3;
   --primary-focus: #004080;
-  --text-color: #1a1a1a;
+  --primary-gradient: linear-gradient(135deg, var(--disability-red) 0%, var(--disability-gold) 25%, var(--disability-green) 50%, var(--disability-blue) 75%, var(--disability-orange) 100%);
+  --secondary-gradient: linear-gradient(135deg, var(--disability-blue) 0%, var(--disability-green) 50%, var(--disability-gold) 100%);
+  --accent-gradient: linear-gradient(135deg, var(--disability-orange) 0%, var(--disability-gold) 100%);
+  --pride-gradient: linear-gradient(135deg, var(--disability-red) 0%, var(--disability-gold) 20%, var(--disability-green) 40%, var(--disability-blue) 60%, var(--disability-orange) 80%, var(--disability-white) 100%);
+  
+  --text-color: #000000;
   --text-secondary: #4a4a4a;
-  --background: #ffffff;
+  --background: #FFFFFF;
   --surface: #f5f5f5;
-  --border-color: #cccccc;
-  --error-color: #d32f2f;
-  --success-color: #2e7d32;
-  --focus-ring: 3px solid #0066cc;
+  --border-color: rgba(255, 255, 255, 0.2);
+  --error-color: var(--disability-red);
+  --success-color: var(--disability-green);
+  --warning-color: var(--disability-gold);
+  --info-color: var(--disability-blue);
+  
+  --focus-ring: 3px solid #6366f1;
   --focus-ring-offset: 2px;
   
-  /* Typography - Accessible sizes */
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  
+  /* Shadows */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(102, 126, 234, 0.15);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.15);
+  --shadow-glow: 0 0 20px rgba(102, 126, 234, 0.4);
+  
+  /* Typography - Modern AI aesthetic */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
   --font-size-base: 16px; /* Minimum readable size */
   --font-size-lg: 18px;
   --font-size-xl: 20px;
@@ -52,12 +91,13 @@ body {
   font-size: calc(var(--font-size-base) * var(--text-size-multiplier));
   line-height: var(--line-height);
   color: var(--text-color);
-  background-color: var(--background);
+  background: var(--background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   height: 100%;
   width: 100%;
   overflow-x: hidden;
+  position: relative;
 }
 
 #root {
@@ -66,13 +106,14 @@ body {
   min-height: 100vh;
 }
 
-/* High contrast mode */
+/* High contrast mode - maintaining Disability Pride awareness */
 body.high-contrast {
-  --text-color: #000000;
-  --background: #ffffff;
-  --primary-color: #0000ff;
-  --border-color: #000000;
-  --surface: #ffffff;
+  --text-color: #FFFFFF;
+  --background: #000000;
+  --primary-color: var(--disability-blue);
+  --border-color: #FFFFFF;
+  --surface: #1a1a1a;
+  --glass-bg: rgba(26, 26, 26, 0.95);
 }
 
 /* Focus styles - Critical for accessibility */
@@ -138,18 +179,45 @@ a:focus-visible {
   outline-offset: var(--focus-ring-offset);
 }
 
-/* Buttons - Accessible styling */
+/* Buttons - Modern AI styling with glassmorphism */
 button {
   font-family: inherit;
   font-size: calc(var(--font-size-base) * var(--text-size-multiplier));
-  padding: 12px 24px;
-  border: 2px solid transparent;
-  border-radius: 4px;
+  padding: 14px 28px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 600;
-  transition: background-color 0.2s, border-color 0.2s;
-  min-height: 44px; /* Minimum touch target size */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 44px;
   min-width: 44px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s;
+}
+
+button:hover::before {
+  left: 100%;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(102, 126, 234, 0.4);
 }
 
 button:focus-visible {

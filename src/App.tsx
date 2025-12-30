@@ -6,6 +6,7 @@ import { PrivateRoute } from './components/PrivateRoute';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
 import { Home } from './pages/Home';
+import { Landing } from './pages/Landing';
 import { PageTransition } from './components/PageTransition';
 import { Learn } from './pages/Learn';
 import { Loading } from './components/Loading';
@@ -21,10 +22,11 @@ function AnimatedRoutes() {
       <PageTransition>
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route
-            path="/"
+            path="/home"
             element={
               <PrivateRoute>
                 <Home />

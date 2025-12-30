@@ -1,0 +1,144 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if requesting user is a teacher
+    function isTeacher() {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    // Helper function to check if requesting user is a parent
+    function isParent() {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
+    }
+
+    match /users/{userId} {
+      // Allow users to read/write their own user document
+      // Allow all authenticated users to read user documents (for teacher search)
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Learning reports subcollection
+      match /learningReports/{reportId} {
+        // Allow authenticated users to create reports in their own subcollection
+        allow create: if request.auth != null && request.auth.uid == userId;
+        
+        // Allow users to read their own reports
+        // Also allow teachers and parents to read student reports
+        // Note: Connection verification is enforced in application code since
+        // Firestore security rules cannot query collections to verify connections
+        allow read: if request.auth != null && 
+                    (request.auth.uid == userId || isTeacher() || isParent());
+        
+        // Allow users to update their own reports (if needed in the future)
+        allow update: if request.auth != null && request.auth.uid == userId;
+        
+          // Allow users to delete their own reports (if needed in the future)
+          allow delete: if request.auth != null && request.auth.uid == userId;
+        }
+        
+        // Persistent learning profile subcollection
+        match /learningProfile/{profileId} {
+          // Allow users to read/write their own learning profile
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+        }
+      }
+
+    // Teacher-Student connection requests
+    match /connectionRequests/{requestId} {
+      // Students can create requests to teachers
+      // Teachers can create requests to students
+      allow create: if request.auth != null &&
+                    (request.resource.data.requestorId == request.auth.uid ||
+                     request.resource.data.requestedId == request.auth.uid);
+      
+      // Users can read requests where they are the requestor or requested
+      allow read: if request.auth != null &&
+                  (resource.data.requestorId == request.auth.uid ||
+                   resource.data.requestedId == request.auth.uid);
+      
+      // Only the requested party (teacher or student) can update (accept/reject)
+      allow update: if request.auth != null &&
+                    resource.data.requestedId == request.auth.uid;
+      
+      // Users can delete their own requests
+      allow delete: if request.auth != null &&
+                    (resource.data.requestorId == request.auth.uid ||
+                     resource.data.requestedId == request.auth.uid);
+    }
+
+    // Teacher-Student connections (confirmed)
+    match /connections/{connectionId} {
+      // Users can create connections when both parties agree
+      allow create: if request.auth != null &&
+                    (request.resource.data.studentId == request.auth.uid ||
+                     request.resource.data.teacherId == request.auth.uid);
+      
+      // Users can read connections where they are the student or teacher
+      allow read: if request.auth != null &&
+                  (resource.data.studentId == request.auth.uid ||
+                   resource.data.teacherId == request.auth.uid);
+      
+      // No updates allowed (connections are permanent)
+      allow update: if false;
+      
+      // Either party can delete the connection
+      allow delete: if request.auth != null &&
+                    (resource.data.studentId == request.auth.uid ||
+                     resource.data.teacherId == request.auth.uid);
+    }
+
+    // Parent-Student connection requests
+    match /parentConnectionRequests/{requestId} {
+      // Parents can create requests to students
+      // Students can create requests to parents
+      allow create: if request.auth != null &&
+                    (request.resource.data.requestorId == request.auth.uid ||
+                     request.resource.data.requestedId == request.auth.uid);
+      
+      // Users can read requests where they are the requestor or requested
+      allow read: if request.auth != null &&
+                  (resource.data.requestorId == request.auth.uid ||
+                   resource.data.requestedId == request.auth.uid);
+      
+      // Only the requested party (parent or student) can update (accept/reject)
+      allow update: if request.auth != null &&
+                    resource.data.requestedId == request.auth.uid;
+      
+      // Users can delete their own requests
+      allow delete: if request.auth != null &&
+                    (resource.data.requestorId == request.auth.uid ||
+                     resource.data.requestedId == request.auth.uid);
+    }
+
+    // Parent-Student connections (confirmed)
+    match /parentConnections/{connectionId} {
+      // Users can create connections when both parties agree
+      allow create: if request.auth != null &&
+                    (request.resource.data.studentId == request.auth.uid ||
+                     request.resource.data.parentId == request.auth.uid);
+      
+      // Users can read connections where they are the student or parent
+      allow read: if request.auth != null &&
+                  (resource.data.studentId == request.auth.uid ||
+                   resource.data.parentId == request.auth.uid);
+      
+      // No updates allowed (connections are permanent)
+      allow update: if false;
+      
+      // Either party can delete the connection
+      allow delete: if request.auth != null &&
+                    (resource.data.studentId == request.auth.uid ||
+                     resource.data.parentId == request.auth.uid);
+    }
+
+    match /{document=**} { 
+      allow read, write: if false; 
+    }
+  }
+}
+

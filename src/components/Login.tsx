@@ -21,6 +21,9 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [emailPrefix, setEmailPrefix] = useState('');
   const [passwordIcons, setPasswordIcons] = useState<string[]>([]);
+  const [normalPassword, setNormalPassword] = useState('');
+  const [useNormalPassword, setUseNormalPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailValid, setEmailValid] = useState<boolean | null>(null);
@@ -53,8 +56,12 @@ export function Login() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    if (passwordIcons.length < 3) {
+    if (!useNormalPassword && passwordIcons.length < 3) {
       return setError('Please choose your 3 password icons! 🌟');
+    }
+
+    if (useNormalPassword && !normalPassword) {
+      return setError('Please enter your password! 🔒');
     }
 
     if (!email || !email.includes('@')) {
@@ -64,17 +71,17 @@ export function Login() {
     try {
       setError('');
       setLoading(true);
-      // Convert icons to password string with email for uniqueness
-      const password = iconsToPassword(passwordIcons, email);
+      // Use normal password or convert icons to password string
+      const password = useNormalPassword ? normalPassword : iconsToPassword(passwordIcons, email);
       await login(email, password);
       setNavigating(true);
-      navigate('/');
+      navigate('/home');
     } catch (err: unknown) {
       if (err instanceof FirebaseError) {
         if (err.code === 'auth/user-not-found') {
           setError('Email not found. Please sign up first! 📧');
         } else if (err.code === 'auth/wrong-password') {
-          setError('Wrong password icons. Try again! 💪');
+          setError(useNormalPassword ? 'Wrong password. Try again! 💪' : 'Wrong password icons. Try again! 💪');
         } else if (err.code === 'auth/invalid-email') {
           setError('Please enter a valid email! 📧');
         } else {
@@ -83,7 +90,11 @@ export function Login() {
       } else {
         setError('Try again, you got this! 💪');
       }
-      setPasswordIcons([]);
+      if (!useNormalPassword) {
+        setPasswordIcons([]);
+      } else {
+        setNormalPassword('');
+      }
     } finally {
       setLoading(false);
     }
@@ -220,34 +231,91 @@ export function Login() {
           </motion.div>
 
           <motion.div variants={itemVariants}>
-            <IconPasswordSelector
-              selectedIcons={passwordIcons}
-              onIconSelect={(icon) => {
-                if (passwordIcons.length < 3) {
-                  setPasswordIcons([...passwordIcons, icon]);
-                }
-              }}
-              maxIcons={3}
-              label="Enter Your Password"
-            />
-            {passwordIcons.length > 0 && (
-              <motion.button
+            <div className="password-mode-toggle">
+              <button
                 type="button"
-                className="clear-icons-button"
-                onClick={() => setPasswordIcons([])}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                className={`password-mode-button ${!useNormalPassword ? 'active' : ''}`}
+                onClick={() => {
+                  setUseNormalPassword(false);
+                  setNormalPassword('');
+                  setError('');
+                }}
+                aria-label="Use icon password"
               >
-                Clear and Start Over 🔄
-              </motion.button>
+                🎨 Icon Password
+              </button>
+              <button
+                type="button"
+                className={`password-mode-button ${useNormalPassword ? 'active' : ''}`}
+                onClick={() => {
+                  setUseNormalPassword(true);
+                  setPasswordIcons([]);
+                  setError('');
+                }}
+                aria-label="Use normal password"
+              >
+                🔒 Normal Password
+              </button>
+            </div>
+
+            {!useNormalPassword ? (
+              <>
+                <IconPasswordSelector
+                  selectedIcons={passwordIcons}
+                  onIconSelect={(icon) => {
+                    if (passwordIcons.length < 3) {
+                      setPasswordIcons([...passwordIcons, icon]);
+                    }
+                  }}
+                  maxIcons={3}
+                  label="Enter Your Password"
+                />
+                {passwordIcons.length > 0 && (
+                  <motion.button
+                    type="button"
+                    className="clear-icons-button"
+                    onClick={() => setPasswordIcons([])}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Clear and Start Over 🔄
+                  </motion.button>
+                )}
+              </>
+            ) : (
+              <div className="form-group child-friendly-group">
+                <label htmlFor="normal-password" className="label-with-icon">
+                  <span className="label-icon">🔒</span>
+                  Enter Your Password
+                </label>
+                <div className="input-wrapper">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="normal-password"
+                    value={normalPassword}
+                    onChange={(e) => setNormalPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="form-group input"
+                    aria-label="Password input"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
             )}
           </motion.div>
 
           <motion.button
             type="submit"
-            disabled={loading || !email || passwordIcons.length < 3}
+            disabled={loading || !email || (!useNormalPassword && passwordIcons.length < 3) || (useNormalPassword && !normalPassword)}
             className="auth-button child-friendly-button"
             aria-busy={loading}
             aria-label={loading ? 'Logging in, please wait' : 'Go in to your account'}
