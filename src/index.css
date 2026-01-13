@@ -67,6 +67,7 @@
   --spacing-md: 1.5rem;
   --spacing-lg: 2rem;
   --spacing-xl: 3rem;
+  --spacing-2xl: 4rem;
   
   /* Accessibility settings */
   --text-size-multiplier: 1;
@@ -247,7 +248,7 @@ input:focus, textarea:focus, select:focus {
   outline: var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
   border-color: var(--primary-color);
-}
+  }
 
 input::placeholder, textarea::placeholder {
   color: var(--text-secondary);
@@ -283,7 +284,7 @@ label {
 .error-text {
   color: var(--error-color);
   font-weight: 600;
-}
+  }
 
 .success-text {
   color: var(--success-color);

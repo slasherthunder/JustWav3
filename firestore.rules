@@ -48,6 +48,92 @@ service cloud.firestore {
         }
       }
 
+    // Message requests - allows users to request permission to message each other
+    match /messageRequests/{requestId} {
+      // Users can create requests where they are the requestor
+      allow create: if request.auth != null && 
+                    request.auth.uid == request.resource.data.requestorId;
+      
+      // Users can read requests where they are either the requestor or requested
+      allow read: if request.auth != null && 
+                  (request.auth.uid == resource.data.requestorId || 
+                   request.auth.uid == resource.data.requestedId);
+      
+      // Only the requested user can update (accept/reject) the request
+      allow update: if request.auth != null && 
+                    request.auth.uid == resource.data.requestedId &&
+                    request.resource.data.status in ['accepted', 'rejected'];
+      
+      // Users can delete their own outgoing requests
+      allow delete: if request.auth != null && 
+                    request.auth.uid == resource.data.requestorId;
+    }
+
+    // Message permissions - bidirectional permissions for messaging
+    match /messagePermissions/{permissionId} {
+      // Users can create permissions (typically when accepting a request)
+      allow create: if request.auth != null && 
+                    (request.auth.uid == request.resource.data.userId1 || 
+                     request.auth.uid == request.resource.data.userId2);
+      
+      // Users can read permissions where they are involved
+      allow read: if request.auth != null && 
+                  (request.auth.uid == resource.data.userId1 || 
+                   request.auth.uid == resource.data.userId2);
+      
+      // Users can delete permissions where they are involved
+      allow delete: if request.auth != null && 
+                    (request.auth.uid == resource.data.userId1 || 
+                     request.auth.uid == resource.data.userId2);
+    }
+
+    // Messages collection
+    match /messages/{messageId} {
+      // Users can create messages where they are the sender
+      allow create: if request.auth != null && 
+                    request.auth.uid == request.resource.data.senderId;
+      
+      // Users can read messages where they are either sender or receiver
+      allow read: if request.auth != null && 
+                  (request.auth.uid == resource.data.senderId || 
+                   request.auth.uid == resource.data.receiverId);
+      
+      // Users can update messages where they are:
+      // - Receiver (to mark as read)
+      // - Sender (to edit their own message within time limit)
+      // - Either sender or receiver (to add/update transcript)
+      allow update: if request.auth != null && 
+                    (request.auth.uid == resource.data.receiverId ||
+                     (request.auth.uid == resource.data.senderId && 
+                      request.resource.data.edited == true &&
+                      request.resource.data.editedAt != null) ||
+                     // Allow adding/updating transcript by either sender or receiver
+                     ((request.auth.uid == resource.data.senderId || 
+                       request.auth.uid == resource.data.receiverId) &&
+                      request.resource.data.keys().hasAll(['transcript']) &&
+                      request.resource.data.transcript is string));
+      
+    // Users can delete their own sent messages
+    allow delete: if request.auth != null && 
+                  request.auth.uid == resource.data.senderId;
+    }
+
+    // Typing status - users can set/clear their own typing status
+    match /typingStatus/{typingId} {
+      // Users can create/update their own typing status
+      allow create, update: if request.auth != null &&
+                            request.resource.data.userId == request.auth.uid;
+      
+      // Users can read typing status where they're part of the conversation
+      // (the userId should be the other user in the conversation)
+      allow read: if request.auth != null &&
+                  (resource.data.userId != request.auth.uid);
+      
+      // Users can delete their own typing status
+      allow delete: if request.auth != null &&
+                    resource.data.userId == request.auth.uid;
+    }
+
     // Teacher-Student connection requests
     match /connectionRequests/{requestId} {
       // Students can create requests to teachers
