@@ -43,13 +43,6 @@ export function Learn() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [gesture, setGesture] = useState<GestureType>('-');
   const [gestureConfidence, setGestureConfidence] = useState(0);
-  const [debugMode, setDebugMode] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<{
-    detected: boolean;
-    landmarks: number;
-    confidence: number;
-    classification: string;
-  } | null>(null);
   
   // Gesture state machine
   type GestureState = 'IDLE' | 'DETECTING' | 'CONFIRMED' | 'COOLDOWN';
@@ -452,6 +445,13 @@ export function Learn() {
       return { gesture: 'thumbsUp', confidence: Math.max(80, confidence) };
     }
     
+    // Open hand: all 4 fingers extended AND thumb extended (5 digits total) - check BEFORE number gestures
+    if (extendedCount === 4 && indexExtended && middleExtended && ringExtended && pinkyExtended && 
+        thumbExtendedUp && !thumbHorizontal && !thumbExtendedDown) {
+      console.log(`✅ Open hand detected (all 5 digits extended)`);
+      return { gesture: 'open', confidence: 90 };
+    }
+    
     // Number gestures (1-4 fingers extended) - SINGLE HAND ONLY
     // CRITICAL: These gestures refer to ONE hand with 1-4 fingers extended, NOT combined across hands
     // This ensures "4 fingers" means one hand with 4 fingers, not two hands with 2 fingers each
@@ -511,10 +511,7 @@ export function Learn() {
     }
     
     // Legacy gestures (for backward compatibility)
-    if (extendedCount === 4 && thumbExtendedUp) {
-      // All fingers extended = open hand
-      return { gesture: 'open', confidence: 90 };
-    } else if (extendedCount === 0 && !thumbExtendedUp && !thumbExtendedDown) {
+    if (extendedCount === 0 && !thumbExtendedUp && !thumbExtendedDown) {
       // No fingers extended = fist
       return { gesture: 'fist', confidence: 85 };
     } else if (extendedCount >= 2 && extendedCount <= 3) {
@@ -1051,8 +1048,8 @@ export function Learn() {
       saveInProgressRef.current = false; // Reset ref on error
     } finally {
       setSavingReport(false);
-    }
-  };
+            }
+          };
 
   // Update persistent learning profile with trends over time
   const updatePersistentProfile = async (
@@ -1277,7 +1274,7 @@ export function Learn() {
               for (const landmark of landmarks) {
                 const x = landmark.x * canvas.width;
                 const y = landmark.y * canvas.height;
-                ctx.beginPath();
+        ctx.beginPath();
                 ctx.arc(x, y, 5, 0, 2 * Math.PI);
                 ctx.fill();
               }
@@ -1293,7 +1290,7 @@ export function Learn() {
 
               ctx.strokeStyle = currentGestureState === 'CONFIRMED' ? '#10b981' : color;
               for (const connection of connections) {
-                ctx.beginPath();
+          ctx.beginPath();
                 for (let i = 0; i < connection.length; i++) {
                   const idx = connection[i];
                   const landmark = landmarks[idx];
@@ -1301,7 +1298,7 @@ export function Learn() {
                   const y = landmark.y * canvas.height;
                   if (i === 0) ctx.moveTo(x, y);
                   else ctx.lineTo(x, y);
-                }
+        }
                 ctx.stroke();
               }
             }
@@ -1324,14 +1321,6 @@ export function Learn() {
             setGesture(finalClassification);
             setGestureConfidence(finalConfidence);
 
-            if (debugMode) {
-              setDebugInfo({
-                detected: true,
-                landmarks: allLandmarks.length > 0 ? allLandmarks[0].length : 0,
-                confidence,
-                classification
-              });
-            }
 
             // Gesture State Machine (use smoothed gesture)
             if (finalClassification !== '-' && finalConfidence >= CONFIRMATION_THRESHOLD) {
@@ -1384,7 +1373,7 @@ export function Learn() {
                       setAnswerFeedback('Great! You understand this.');
                       speakText('Great! You understand this.');
                     },
-                    thumbsDown: () => {
+                    open: () => {
                       recordHelp();
                       setAnswerFeedback("I don't understand. Let me explain this again.");
                       speakText("I don't understand. Let me explain this again.");
@@ -1440,14 +1429,6 @@ export function Learn() {
               setGestureState('IDLE');
             }
             
-            if (debugMode) {
-              setDebugInfo({
-                detected: false,
-                landmarks: 0,
-                confidence: 0,
-                classification: '-'
-              });
-            }
           }
 
           ctx.restore();
@@ -1499,7 +1480,7 @@ export function Learn() {
         cameraRef.current = null;
       }
     };
-  }, [mediaReady, currentMode, content, recordHelp, changeMode, nextItem, recordSuccess, debugMode]);
+  }, [mediaReady, currentMode, content, recordHelp, changeMode, nextItem, recordSuccess]);
 
 
   // Active adaptation: auto-switch modes based on frustration
@@ -1571,7 +1552,7 @@ export function Learn() {
     '3': '3 fingers detected. Answer C selected.',
     '4': '4 fingers detected. Answer D selected.',
     'thumbsUp': 'Thumbs up detected. I understand.',
-    'thumbsDown': "Two thumbs down detected. I don't understand.",
+    'open': "Open hand detected. I don't understand.",
     'pointLeft': 'Pointing left detected. Next question.',
     'pointRight': 'Pointing right detected. Next question.',
     '-': ''
@@ -1700,7 +1681,7 @@ export function Learn() {
                 }}
                   videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
                 className="webcam-feed"
-              />
+                />
               <canvas 
                 ref={canvasRef} 
                 className="gesture-canvas"
@@ -1757,33 +1738,12 @@ export function Learn() {
                     >
                       🔄 Reset
                     </button>
-                    <button
-                      className="reset-gesture-btn"
-                      onClick={() => setDebugMode(!debugMode)}
-                      aria-label="Toggle debug mode"
-                      title="Show debug information"
-                      style={{ background: debugMode ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : undefined }}
-                    >
-                      {debugMode ? '🔍 Debug ON' : '🔍 Debug'}
-                    </button>
                   </>
                 )}
               </div>
               {!gestureDetectionEnabled && (
                 <div className="detection-disabled-notice">
                   <p>⚠️ Gesture detection is paused. Click "Start Detection" to resume.</p>
-                </div>
-              )}
-              {debugMode && debugInfo && (
-                <div className="debug-info">
-                  <h4>Debug Information</h4>
-                  <div className="debug-stats">
-                    <div>Detected: {debugInfo.detected ? '✓' : '✗'}</div>
-                    <div>Landmarks: {debugInfo.landmarks}</div>
-                    <div>Confidence: {Math.round(debugInfo.confidence)}%</div>
-                    <div>Gesture: {debugInfo.classification}</div>
-                    <div>State: {gestureState}</div>
-                  </div>
                 </div>
               )}
             </div>
@@ -1796,7 +1756,7 @@ export function Learn() {
                   {gesture === '3' && '3️⃣'}
                   {gesture === '4' && '4️⃣'}
                   {gesture === 'thumbsUp' && '👍'}
-                  {gesture === 'thumbsDown' && '👎'}
+                  {gesture === 'open' && '🖐️'}
                   {gesture === 'pointLeft' && '👈'}
                   {gesture === 'pointRight' && '👉'}
                   {gesture === '-' && '—'}
@@ -1807,7 +1767,7 @@ export function Learn() {
                   {gesture === '3' && '3 Fingers (Answer C)'}
                   {gesture === '4' && '4 Fingers (Answer D)'}
                   {gesture === 'thumbsUp' && 'Thumbs Up (I understand)'}
-                  {gesture === 'thumbsDown' && "Two Thumbs Down (I don't understand)"}
+                  {gesture === 'open' && "Open Hand (I don't understand)"}
                   {gesture === 'pointLeft' && 'Point Left (Next question)'}
                   {gesture === 'pointRight' && 'Point Right (Next question)'}
                   {gesture === '-' && 'No Gesture Detected'}
@@ -1828,7 +1788,7 @@ export function Learn() {
                         lastConfirmedGesture === '3' ? 'Answer C selected' :
                         lastConfirmedGesture === '4' ? 'Answer D selected' :
                         lastConfirmedGesture === 'thumbsUp' ? 'I understand' :
-                        lastConfirmedGesture === 'thumbsDown' ? "I don't understand" :
+                        lastConfirmedGesture === 'open' ? "I don't understand" :
                         lastConfirmedGesture === 'pointLeft' || lastConfirmedGesture === 'pointRight' ? 'Next question' :
                         'Gesture confirmed'}
                   </div>
@@ -1873,8 +1833,8 @@ export function Learn() {
                     <span>Thumbs Up = I understand</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon">👎👎</span>
-                    <span>Two Thumbs Down = I don't understand</span>
+                    <span className="guide-icon">🖐️</span>
+                    <span>Open Hand = I don't understand</span>
                   </div>
                   <div className="guide-item">
                     <span className="guide-icon">👉</span>
@@ -2150,6 +2110,7 @@ export function Learn() {
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
                           {answerFeedback}
               </div>
+
             )}
                     </div>
                     <div className="mode-info-card">
@@ -2237,9 +2198,9 @@ export function Learn() {
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">👎👎</span>
+                          <span className="instruction-icon">🖐️</span>
                           <div>
-                            <strong>Two Thumbs Down</strong>
+                            <strong>Open Hand</strong>
                             <span className="instruction-desc">I don't understand</span>
                           </div>
                         </div>

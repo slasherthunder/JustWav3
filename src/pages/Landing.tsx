@@ -28,12 +28,32 @@ export function Landing() {
 
   // Show loading while checking authentication
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px'
+      }}>
+        Loading...
+      </div>
+    );
   }
 
   // Don't render if user is authenticated (will be redirected)
   if (currentUser) {
-    return null;
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px'
+      }}>
+        Redirecting...
+      </div>
+    );
   }
 
   return (
@@ -76,7 +96,7 @@ export function Landing() {
               <span className="feature-icon">👋</span>
               <div className="feature-content">
                 <h3>Real-Time Gesture Recognition</h3>
-                <p>Control your learning experience with simple hand gestures</p>
+                <p>Control your learning experience with simple hand gestures - thumbs up, open hand, pointing, and more</p>
               </div>
             </div>
 
@@ -84,7 +104,7 @@ export function Landing() {
               <span className="feature-icon">🎯</span>
               <div className="feature-content">
                 <h3>Adaptive Learning</h3>
-                <p>Personalized content delivery that adapts to your learning style</p>
+                <p>Personalized content delivery that adapts to your learning style and performance</p>
               </div>
             </div>
 
@@ -92,15 +112,63 @@ export function Landing() {
               <span className="feature-icon">📊</span>
               <div className="feature-content">
                 <h3>Progress Tracking</h3>
-                <p>Detailed reports on your learning progress and preferences</p>
+                <p>Detailed reports on your learning progress, preferences, and personalized recommendations</p>
               </div>
             </div>
 
             <div className="feature-item">
               <span className="feature-icon">🔊</span>
               <div className="feature-content">
-                <h3>Multimodal Support</h3>
-                <p>Audio, visual, icon-based, and gesture-driven learning modes</p>
+                <h3>Five Learning Modes</h3>
+                <p>Audio, Image, Icons, Gesture, and Simple modes to match your learning style</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <span className="feature-icon">💬</span>
+              <div className="feature-content">
+                <h3>Messages & Connect</h3>
+                <p>Communicate with teachers, parents, and students through our integrated messaging system</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <span className="feature-icon">👨‍👩‍👧‍👦</span>
+              <div className="feature-content">
+                <h3>Role-Based System</h3>
+                <p>Dedicated dashboards for Students, Teachers, and Parents with role-specific features</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <span className="feature-icon">🔐</span>
+              <div className="feature-content">
+                <h3>Flexible Authentication</h3>
+                <p>Choose between traditional passwords or child-friendly icon-based passwords</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <span className="feature-icon">🔗</span>
+              <div className="feature-content">
+                <h3>Connection System</h3>
+                <p>Teachers and students can connect to share progress and collaborate on learning</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <span className="feature-icon">♿</span>
+              <div className="feature-content">
+                <h3>Accessibility First</h3>
+                <p>Text size controls, high contrast mode, keyboard navigation, and screen reader support</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <span className="feature-icon">🛡️</span>
+              <div className="feature-content">
+                <h3>Secure & Protected</h3>
+                <p>Rate limiting, input validation, email verification, and secure data handling</p>
               </div>
             </div>
           </div>

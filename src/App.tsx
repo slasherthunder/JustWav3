@@ -9,6 +9,7 @@ import { Home } from './pages/Home';
 import { Landing } from './pages/Landing';
 import { PageTransition } from './components/PageTransition';
 import { Learn } from './pages/Learn';
+import { Messages } from './pages/Messages';
 import { Loading } from './components/Loading';
 import './App.css';
 
@@ -23,6 +24,7 @@ function AnimatedRoutes() {
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<Landing />} />
+          <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route
@@ -38,6 +40,14 @@ function AnimatedRoutes() {
             element={
               <PrivateRoute>
                 <Learn />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/messages"
+            element={
+              <PrivateRoute>
+                <Messages />
               </PrivateRoute>
             }
           />

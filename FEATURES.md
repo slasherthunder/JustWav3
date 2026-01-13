@@ -394,6 +394,16 @@ Feature cards explaining:
 - Single Page Application (SPA) configuration
 - Custom domain support
 - HTTPS by default
+- Security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection)
+- Cache control for static assets
+
+#### **Firebase Cloud Functions**
+- Serverless backend functions (Node.js 20)
+- Express.js API endpoints
+- Rate limiting middleware integration
+- Input validation middleware
+- Health check endpoints
+- API route handlers for authentication and public endpoints
 
 ---
 
@@ -451,6 +461,12 @@ Feature cards explaining:
 - **Routing**: React Router DOM 7.11.0
 - **Animation**: Framer Motion 12.23.26
 - **Backend**: Firebase 12.7.0
+  - **Firebase Authentication**: Email/password and custom auth
+  - **Cloud Firestore**: Real-time database
+  - **Firebase Hosting**: Production deployment
+  - **Firebase Functions**: Serverless backend (Node.js 20)
+- **Validation**: Zod 4.3.5 (schema-based validation)
+- **Rate Limiting**: express-rate-limit 7.1.5 (server-side)
 - **Gesture Recognition**: MediaPipe Hands 0.4.1675469240
 - **Machine Learning**: TensorFlow.js 4.22.0 (for future ML enhancements)
 - **Webcam**: react-webcam 7.2.0
@@ -461,6 +477,8 @@ Feature cards explaining:
 - Component-based architecture
 - Custom hooks for reusable logic
 - Context API for state management
+- Schema-based validation with Zod
+- Type-safe validation utilities
 - Error boundaries (planned)
 
 ### **Performance Optimizations**
@@ -474,13 +492,81 @@ Feature cards explaining:
 
 ## 🔐 Security Features
 
+### **Authentication & Authorization**
 - Secure password storage (Firebase Authentication)
 - Email verification for account security
 - Firestore security rules for data access control
 - Role-based access control
 - HTTPS for all connections
-- Access code system for parent-child relationships
+- Access code system for parent-child relationships (SHA-256 hashed)
 - Secure token-based authentication
+- Icon-based password system for child-friendly authentication
+
+### **Rate Limiting**
+
+#### **Server-Side Rate Limiting**
+- **Firebase Cloud Functions** with `express-rate-limit` middleware
+- **General API endpoints**: 100 requests per 15 minutes per IP/user combination
+- **Authentication endpoints**: 5 requests per 15 minutes per IP/email combination
+- **IP + User-based limiting**: Combines IP address and user identifier for accurate tracking
+- **Graceful 429 responses**: Returns HTTP 429 (Too Many Requests) with retry-after information
+- **Standard headers**: Includes `RateLimit-*` headers in all responses
+- **Health check exemption**: Health endpoints are not rate-limited
+
+#### **Client-Side Rate Limiting**
+- **In-memory rate limiter** for Firebase operations (safety layer)
+- **Signup**: 5 attempts per 15 minutes
+- **Login**: 10 attempts per 15 minutes
+- **Password Reset**: 3 attempts per hour
+- **Email Verification**: 5 attempts per hour
+- **Firestore Writes**: 60 per minute
+- **Firestore Reads**: 100 per minute
+- **User-friendly error messages** with retry-after information
+
+### **Input Validation & Sanitization**
+
+#### **Schema-Based Validation**
+- **Zod schema validation** for all user inputs
+- **Type-safe validation** with TypeScript inference
+- **Strict mode**: Rejects unexpected fields in all inputs
+- **Comprehensive schemas** for:
+  - Signup data (email, password, role, password mode)
+  - Login data (email, password/icon password)
+  - Messages (content, receiver ID)
+  - Search queries
+  - Email verification requests
+  - Password reset requests
+  - Connection requests
+
+#### **Input Sanitization**
+- **String sanitization**: Removes null bytes and control characters
+- **Email normalization**: Lowercase conversion and format validation
+- **Length limits**: Enforces RFC-compliant limits (email: 254 chars, password: 6-128 chars, messages: 5000 chars)
+- **Character filtering**: Rejects dangerous characters and patterns
+- **Whitespace handling**: Trims and validates whitespace-only inputs
+
+#### **Validation Features**
+- **Server-side validation**: Express middleware for API endpoints
+- **Client-side validation**: Real-time validation in forms
+- **User-friendly error messages**: Field-specific error paths and clear messages
+- **Type checking**: Runtime type validation with Zod schemas
+- **Field rejection**: Strict mode prevents injection of unexpected fields
+
+#### **Validation Limits**
+- Email: Maximum 254 characters (RFC 5321 compliant)
+- Email local part: Maximum 64 characters
+- Password: 6-128 characters
+- Messages: Maximum 5000 characters
+- Search queries: Maximum 100 characters
+- User names: Maximum 100 characters
+- Password icons: Exactly 3 icons required
+
+### **Data Protection**
+- Firestore security rules with role-based access
+- User-specific data isolation
+- Secure connection request management
+- Input sanitization before database operations
+- Protection against injection attacks
 
 ---
 
@@ -531,5 +617,5 @@ JustWav3 is specifically designed for:
 
 ---
 
-*Last Updated: Based on current codebase analysis*
+*Last Updated: January 2025 - Includes rate limiting, input validation, and security enhancements*
 

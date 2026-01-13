@@ -65,6 +65,12 @@ npm run preview
    VITE_FIREBASE_APP_ID=your-app-id
    ```
 
+## Quick Demo Setup
+
+Want to see the app in action quickly? See [DEMO_QUICKSTART.md](./DEMO_QUICKSTART.md) for a 5-minute setup guide.
+
+For a detailed demo guide, see [DEMO_GUIDE.md](./DEMO_GUIDE.md).
+
 ## Tech Stack
 
 - **React** 19.2.0

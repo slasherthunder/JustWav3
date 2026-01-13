@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { IconPasswordSelector } from './IconPasswordSelector';
 import './Auth.css';
 import { FirebaseError } from 'firebase/app';
+import { validateLoginInput } from '../utils/validation';
 
 // Convert icon array to password string with email for uniqueness
 function iconsToPassword(icons: string[], email: string): string {
@@ -56,24 +56,39 @@ export function Login() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    if (!useNormalPassword && passwordIcons.length < 3) {
-      return setError('Please choose your 3 password icons! 🌟');
+    setError('');
+    setLoading(true);
+
+    // Prepare data for validation
+    const loginData = {
+      email,
+      password: useNormalPassword ? normalPassword : undefined,
+      passwordIcons: !useNormalPassword ? passwordIcons : undefined,
+      useNormalPassword,
+    };
+
+    // Validate and sanitize input
+    const validation = validateLoginInput(loginData);
+    
+    if (!validation.success) {
+      setLoading(false);
+      const errorMessage = validation.errorMessages?.join('. ') || 'Please check your input and try again.';
+      return setError(`${errorMessage} 💪`);
     }
 
-    if (useNormalPassword && !normalPassword) {
-      return setError('Please enter your password! 🔒');
+    if (!validation.data) {
+      setLoading(false);
+      return setError('Validation failed. Please try again. 💪');
     }
 
-    if (!email || !email.includes('@')) {
-      return setError('Please enter your email! 📧');
-    }
+    const validatedData = validation.data;
 
     try {
-      setError('');
-      setLoading(true);
       // Use normal password or convert icons to password string
-      const password = useNormalPassword ? normalPassword : iconsToPassword(passwordIcons, email);
-      await login(email, password);
+      const password = validatedData.useNormalPassword 
+        ? (validatedData.password || '') 
+        : iconsToPassword(validatedData.passwordIcons || [], validatedData.email);
+      await login(validatedData.email, password);
       setNavigating(true);
       navigate('/home');
     } catch (err: unknown) {
@@ -100,92 +115,50 @@ export function Login() {
     }
   }
 
-  const containerVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.4,
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 10 },
-    visible: { opacity: 1, y: 0 }
-  };
-
   return (
-    <motion.div
-      className="auth-container child-friendly"
-      initial="hidden"
-      animate="visible"
-      variants={containerVariants}
-    >
+    <div className="auth-container child-friendly">
       <a href="#login-form" className="skip-link">
         Skip to login form
       </a>
       
-      {/* Friendly Mascot */}
-      <motion.div
-        className="mascot"
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-      >
-        <motion.span
-          style={{ fontSize: '80px', display: 'block' }}
-          animate={{ rotate: [0, 10, -10, 10, 0] }}
-          transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-        >
+      <Link to="/" className="back-to-main-button">
+        ← Back to Main
+      </Link>
+      
+      <div className="mascot">
+        <span style={{ fontSize: '80px', display: 'block' }}>
           👋
-        </motion.span>
-      </motion.div>
+        </span>
+      </div>
 
-      <motion.div
-        className="auth-card child-friendly-card"
-        variants={itemVariants}
-      >
-        <motion.h2
-          variants={itemVariants}
-          className="friendly-header"
-        >
+      <div className="auth-card child-friendly-card">
+        <h2 className="friendly-header">
           Welcome Back! 👋
-        </motion.h2>
+        </h2>
         
-        <motion.p
-          className="friendly-subtitle"
-          variants={itemVariants}
-        >
+        <p className="friendly-subtitle">
           Let's go in together!
-        </motion.p>
+        </p>
 
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              className="error-message friendly-error"
-              role="alert"
-              aria-live="assertive"
-              initial={{ opacity: 0, x: -20, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-            >
-              <span className="error-icon">❌</span>
-              {error}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {error && (
+          <div
+            className="error-message friendly-error"
+            role="alert"
+            aria-live="assertive"
+          >
+            <span className="error-icon">❌</span>
+            {error}
+          </div>
+        )}
 
         <form id="login-form" onSubmit={handleSubmit} aria-label="Login form">
-          <motion.div className="form-group child-friendly-group" variants={itemVariants}>
+          <div className="form-group child-friendly-group">
             <label htmlFor="email-prefix" className="label-with-icon">
               <span className="label-icon">📧</span>
               <span>Your Email</span>
             </label>
             <div className="email-input-group">
-              <motion.input
+              <input
                 type="text"
                 id="email-prefix"
                 name="email-prefix"
@@ -194,43 +167,31 @@ export function Login() {
                 required
                 placeholder="Type your name here"
                 className={emailValid === true ? 'input-valid' : emailValid === false ? 'input-invalid' : ''}
-                whileFocus={{ scale: 1.02 }}
-                transition={{ type: "spring", stiffness: 400 }}
                 style={{ flex: 1 }}
               />
-              <motion.button
+              <button
                 type="button"
                 className="gmail-button"
                 onClick={handleGmailClick}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
                 aria-label="Add @gmail.com to email"
               >
                 @gmail.com
-              </motion.button>
+              </button>
             </div>
             {email && (
-              <motion.div
-                className="email-preview"
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
+              <div className="email-preview">
                 <span className="email-preview-label">Your email:</span>
                 <span className="email-preview-value">{email}</span>
-                {emailValid && (
-                  <motion.span
-                    className="email-check"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                  >
-                    ✅
-                  </motion.span>
-                )}
-              </motion.div>
+              </div>
             )}
-          </motion.div>
+          </div>
 
-          <motion.div variants={itemVariants}>
+          <div>
+            <div className="form-group child-friendly-group">
+              <label className="label-with-icon" style={{ justifyContent: 'center' }}>
+                <span>Please choose only one type of password:</span>
+              </label>
+            </div>
             <div className="password-mode-toggle">
               <button
                 type="button"
@@ -254,7 +215,7 @@ export function Login() {
                 }}
                 aria-label="Use normal password"
               >
-                🔒 Normal Password
+                Normal Password
               </button>
             </div>
 
@@ -271,17 +232,13 @@ export function Login() {
                   label="Enter Your Password"
                 />
                 {passwordIcons.length > 0 && (
-                  <motion.button
+                  <button
                     type="button"
                     className="clear-icons-button"
                     onClick={() => setPasswordIcons([])}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
                   >
                     Clear and Start Over 🔄
-                  </motion.button>
+                  </button>
                 )}
               </>
             ) : (
@@ -311,29 +268,21 @@ export function Login() {
                 </div>
               </div>
             )}
-          </motion.div>
+          </div>
 
-          <motion.button
+          <button
             type="submit"
             disabled={loading || !email || (!useNormalPassword && passwordIcons.length < 3) || (useNormalPassword && !normalPassword)}
             className="auth-button child-friendly-button"
             aria-busy={loading}
             aria-label={loading ? 'Logging in, please wait' : 'Go in to your account'}
-            variants={itemVariants}
-            whileHover={{ scale: loading ? 1 : 1.05 }}
-            whileTap={{ scale: loading ? 1 : 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
           >
             {loading ? (
               <>
                 <span>Loading...</span>
-                <motion.span
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  style={{ display: 'inline-block', marginLeft: '8px' }}
-                >
+                <span style={{ display: 'inline-block', marginLeft: '8px' }}>
                   ⏳
-                </motion.span>
+                </span>
               </>
             ) : (
               <>
@@ -341,25 +290,22 @@ export function Login() {
                 <span style={{ marginLeft: '8px' }}>➡️</span>
               </>
             )}
-          </motion.button>
+          </button>
         </form>
 
-        <motion.p
-          className="auth-switch friendly-switch"
-          variants={itemVariants}
-        >
+        <p className="auth-switch friendly-switch">
           New here?{' '}
           <Link to="/signup" aria-label="Go to sign up page" className="friendly-link">
             Start Here
           </Link>
-        </motion.p>
+        </p>
 
-        <motion.p className="help-text" variants={itemVariants}>
+        <p className="help-text">
           <Link to="/signup" className="help-link">
             Need help? 💡
           </Link>
-        </motion.p>
-      </motion.div>
-    </motion.div>
+        </p>
+      </div>
+    </div>
   );
 }

@@ -12,6 +12,7 @@ import type { User } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { Loading } from '../components/Loading';
+import { withRateLimit } from '../utils/rateLimiter';
 
 export type UserRole = 'parent' | 'student' | 'teacher' | null;
 
@@ -41,50 +42,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function signup(email: string, password: string, role: UserRole) {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    // Send email verification
     try {
-      console.log('Sending verification email to:', user.email);
-      await sendEmailVerification(user, {
-        url: window.location.origin,
-        handleCodeInApp: false,
-      });
-      console.log('Verification email sent successfully');
-    } catch (error: any) {
-      console.error('Error sending verification email:', error);
-      console.error('Error code:', error?.code);
-      console.error('Error message:', error?.message);
-      // Don't throw here - account creation succeeded, just email sending failed
-      // But we'll log it so user can see in console
-    }
+      await withRateLimit('auth:signup', async () => {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
 
-    if (user && role) {
-      const payload = {
-        email: user.email,
-        role: role,
-        createdAt: new Date().toISOString(),
-        emailVerified: false,
-      };
-
-      let attempt = 0;
-      let lastError: unknown = null;
-      while (attempt < 3) {
+        // Send email verification
         try {
-          await setDoc(doc(db, 'users', user.uid), payload);
-          setUserRole(role);
-          break;
-        } catch (err) {
-          lastError = err;
-          attempt += 1;
-          await new Promise((r) => setTimeout(r, 250 * attempt));
+          console.log('Sending verification email to:', user.email);
+          await sendEmailVerification(user, {
+            url: window.location.origin,
+            handleCodeInApp: false,
+          });
+          console.log('Verification email sent successfully');
+        } catch (error: any) {
+          console.error('Error sending verification email:', error);
+          console.error('Error code:', error?.code);
+          console.error('Error message:', error?.message);
+          // Don't throw here - account creation succeeded, just email sending failed
+          // But we'll log it so user can see in console
         }
-      }
 
-      if (attempt === 3 && lastError) {
-        throw lastError;
+        if (user && role) {
+          const payload = {
+            email: user.email,
+            role: role,
+            createdAt: new Date().toISOString(),
+            emailVerified: false,
+          };
+
+          let attempt = 0;
+          let lastError: unknown = null;
+          while (attempt < 3) {
+            try {
+              await setDoc(doc(db, 'users', user.uid), payload);
+              setUserRole(role);
+              break;
+            } catch (err) {
+              lastError = err;
+              attempt += 1;
+              await new Promise((r) => setTimeout(r, 250 * attempt));
+            }
+          }
+
+          if (attempt === 3 && lastError) {
+            throw lastError;
+          }
+        }
+      }, email);
+    } catch (error: any) {
+      // Handle rate limit errors specifically
+      if (error.code === 'rate-limit-exceeded') {
+        const retryAfter = error.retryAfter || 900; // Default to 15 minutes
+        const minutes = Math.ceil(retryAfter / 60);
+        throw new Error(`Too many signup attempts. Please try again in ${minutes} minute${minutes > 1 ? 's' : ''}.`);
       }
+      throw error;
     }
   }
 
@@ -95,16 +108,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (currentUser.emailVerified) {
       throw new Error('Email already verified');
     }
-    console.log('Resending verification email to:', currentUser.email);
-    await sendEmailVerification(currentUser, {
-      url: window.location.origin,
-      handleCodeInApp: false,
-    });
-    console.log('Verification email resent successfully');
+    try {
+      await withRateLimit('auth:emailVerification', async () => {
+        console.log('Resending verification email to:', currentUser.email);
+        await sendEmailVerification(currentUser, {
+          url: window.location.origin,
+          handleCodeInApp: false,
+        });
+        console.log('Verification email resent successfully');
+      }, currentUser.email || currentUser.uid);
+    } catch (error: any) {
+      // Handle rate limit errors specifically
+      if (error.code === 'rate-limit-exceeded') {
+        const retryAfter = error.retryAfter || 3600; // Default to 1 hour
+        const minutes = Math.ceil(retryAfter / 60);
+        throw new Error(`Too many verification email requests. Please try again in ${minutes} minute${minutes > 1 ? 's' : ''}.`);
+      }
+      throw error;
+    }
   }
 
   async function login(email: string, password: string) {
-    await signInWithEmailAndPassword(auth, email, password);
+    try {
+      await withRateLimit('auth:login', async () => {
+        await signInWithEmailAndPassword(auth, email, password);
+      }, email);
+    } catch (error: any) {
+      // Handle rate limit errors specifically
+      if (error.code === 'rate-limit-exceeded') {
+        const retryAfter = error.retryAfter || 900; // Default to 15 minutes
+        const minutes = Math.ceil(retryAfter / 60);
+        throw new Error(`Too many login attempts. Please try again in ${minutes} minute${minutes > 1 ? 's' : ''}.`);
+      }
+      throw error;
+    }
   }
 
   function logout() {
