@@ -965,8 +965,24 @@ export function ParentHome() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400 }}
+            style={{
+              padding: '14px',
+              background: 'linear-gradient(135deg, #FF6B6B 0%, #FF3B30 50%, #FF6B6B 100%)',
+              color: 'white',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '12px',
+              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+              cursor: 'pointer',
+              minWidth: '44px',
+              minHeight: '44px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
+              transition: 'all 0.3s ease'
+            }}
           >
-            Logout
+            🚪
           </motion.button>
         </div>
       </motion.header>
@@ -1009,6 +1025,32 @@ export function ParentHome() {
           >
             Manage your child's learning journey and track their progress here.
           </motion.p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '0.75rem' }}>
+            <motion.button
+              onClick={() => { setNavigating(true); navigate('/learn'); }}
+              className="logout-button"
+              aria-label="Demo version"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400 }}
+            >
+              Demo Version
+            </motion.button>
+            <motion.button
+              onClick={() => { setNavigating(true); navigate('/practice'); }}
+              className="logout-button"
+              aria-label="Start practice"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400 }}
+              style={{ 
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
+              }}
+            >
+              Start Practice
+            </motion.button>
+          </div>
         </motion.div>
 
         {/* Connection Requests Section */}

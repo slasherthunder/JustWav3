@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, query, orderBy, Timestamp, query as fsQuery, where, limit, addDoc, serverTimestamp, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp, query as fsQuery, where, limit, addDoc, serverTimestamp, doc, updateDoc, onSnapshot, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
+import { getAssignmentsByStudent } from '../utils/assignments';
+import type { Assignment } from '../types/assignments';
 import './Home.css';
 
 interface LearningReport {
@@ -76,58 +78,8 @@ export function StudentHome() {
   const { currentUser, logout } = useAuth();
   const { setNavigating } = useNavigation();
   const navigate = useNavigate();
-  const [textSize, setTextSize] = useState(() => {
-    const saved = localStorage.getItem('home-text-size');
-    return saved ? parseFloat(saved) : 1;
-  });
-  const [highContrast, setHighContrast] = useState(() => {
-    return localStorage.getItem('home-high-contrast') === 'true';
-  });
-  const [fontPreference, setFontPreference] = useState<'default' | 'opendyslexic'>(() => {
-    const saved = localStorage.getItem('home-font');
-    return (saved === 'default' || saved === 'opendyslexic') ? saved : 'default';
-  });
-  const [reducedMotion, setReducedMotion] = useState(() => {
-    return localStorage.getItem('home-reduced-motion') === 'true';
-  });
-  const [spacing, setSpacing] = useState<'compact' | 'comfortable'>(() => {
-    const saved = localStorage.getItem('home-spacing');
-    return (saved === 'compact' || saved === 'comfortable') ? saved : 'comfortable';
-  });
-  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
-  const [showAccessibilityModal, setShowAccessibilityModal] = useState(false);
-  const [showBrightnessModal, setShowBrightnessModal] = useState(false);
-  const [showContrastModal, setShowContrastModal] = useState(false);
-  const [showSaturationModal, setShowSaturationModal] = useState(false);
-  
-  // Additional accessibility features
-  const [hideImages, setHideImages] = useState(() => localStorage.getItem('hide-images') === 'true');
-  const [readableFonts, setReadableFonts] = useState(() => localStorage.getItem('readable-fonts') === 'true');
-  const [dyslexicFont, setDyslexicFont] = useState(() => localStorage.getItem('dyslexic-font') === 'true');
-  const [bionicReading, setBionicReading] = useState(() => localStorage.getItem('bionic-reading') === 'true');
-  const [stopAnimations, setStopAnimations] = useState(() => localStorage.getItem('stop-animations') === 'true');
-  const [invertColors, setInvertColors] = useState(() => localStorage.getItem('invert-colors') === 'true');
-  const [brightness, setBrightness] = useState(() => {
-    const saved = localStorage.getItem('brightness');
-    return saved ? parseFloat(saved) : 100;
-  });
-  const [contrast, setContrast] = useState(() => {
-    const saved = localStorage.getItem('contrast');
-    return saved ? parseFloat(saved) : 100;
-  });
-  const [saturation, setSaturation] = useState(() => {
-    const saved = localStorage.getItem('saturation');
-    return saved ? parseFloat(saved) : 100;
-  });
-  const [colorFilter, setColorFilter] = useState<'none' | 'grayscale' | 'red-green' | 'blue-yellow' | 'green-red'>(() => {
-    const saved = localStorage.getItem('color-filter');
-    return (saved === 'none' || saved === 'grayscale' || saved === 'red-green' || saved === 'blue-yellow' || saved === 'green-red') ? saved : 'none';
-  });
-  const [readingLine, setReadingLine] = useState(() => localStorage.getItem('reading-line') === 'true');
-  const [highlightLinks, setHighlightLinks] = useState(() => localStorage.getItem('highlight-links') === 'true');
-  const [readingMask, setReadingMask] = useState(() => localStorage.getItem('reading-mask') === 'true');
-  const [pageStructure, setPageStructure] = useState(() => localStorage.getItem('page-structure') === 'true');
-  
+  const [textSize, setTextSize] = useState(1);
+  const [highContrast, setHighContrast] = useState(false);
   const [reports, setReports] = useState<LearningReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
   
@@ -146,9 +98,31 @@ export function StudentHome() {
   const [parentPendingRequests, setParentPendingRequests] = useState<ParentConnectionRequest[]>([]);
   const [myParents, setMyParents] = useState<ParentConnection[]>([]);
   
+  // Assignments state
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  
   // Notification counts
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  
+  // Accessibility modal state
+  const [showAccessibilityModal, setShowAccessibilityModal] = useState(false);
+  
+  // Assignment selection modal state
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [assignmentMcqSets, setAssignmentMcqSets] = useState<Record<string, { title: string }>>({});
+  const [loadingMcqSets, setLoadingMcqSets] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--text-size-multiplier', textSize.toString());
+    
+    if (highContrast) {
+      document.body.classList.add('high-contrast');
+    } else {
+      document.body.classList.remove('high-contrast');
+    }
+  }, [textSize, highContrast]);
 
   // Fetch notification counts (unread messages and pending requests)
   useEffect(() => {
@@ -180,345 +154,6 @@ export function StudentHome() {
       unsubscribeRequests();
     };
   }, [currentUser]);
-
-  // Save preferences to localStorage
-  useEffect(() => {
-    localStorage.setItem('home-text-size', textSize.toString());
-  }, [textSize]);
-
-  useEffect(() => {
-    localStorage.setItem('home-high-contrast', highContrast.toString());
-  }, [highContrast]);
-
-  useEffect(() => {
-    localStorage.setItem('home-font', fontPreference);
-  }, [fontPreference]);
-
-  useEffect(() => {
-    localStorage.setItem('home-reduced-motion', reducedMotion.toString());
-  }, [reducedMotion]);
-
-  useEffect(() => {
-    localStorage.setItem('home-spacing', spacing);
-  }, [spacing]);
-
-  // Apply accessibility preferences
-  useEffect(() => {
-    document.documentElement.style.setProperty('--text-size-multiplier', textSize.toString());
-    
-    if (highContrast) {
-      document.body.classList.add('high-contrast');
-    } else {
-      document.body.classList.remove('high-contrast');
-    }
-
-    if (fontPreference === 'opendyslexic') {
-      document.body.classList.add('font-opendyslexic');
-    } else {
-      document.body.classList.remove('font-opendyslexic');
-    }
-
-    if (reducedMotion) {
-      document.documentElement.style.setProperty('--motion-reduce', '1');
-    } else {
-      document.documentElement.style.setProperty('--motion-reduce', '0');
-    }
-
-    const container = document.querySelector('.home-container');
-    if (container) {
-      container.className = `home-container spacing-${spacing}`;
-    }
-  }, [textSize, highContrast, fontPreference, reducedMotion, spacing]);
-
-  // Load OpenDyslexic font if selected
-  useEffect(() => {
-    if (fontPreference === 'opendyslexic') {
-      const existingLink = document.querySelector('link[data-opendyslexic]');
-      if (!existingLink) {
-        const link = document.createElement('link');
-        link.setAttribute('data-opendyslexic', 'true');
-        link.href = 'https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/open-dyslexic.css';
-        link.rel = 'stylesheet';
-        document.head.appendChild(link);
-      }
-    }
-  }, [fontPreference]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + / to show keyboard shortcuts
-      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault();
-        setShowKeyboardShortcuts(!showKeyboardShortcuts);
-      }
-      // Escape to close modals
-      if (e.key === 'Escape') {
-        if (showKeyboardShortcuts) {
-          setShowKeyboardShortcuts(false);
-        }
-        if (showAccessibilityModal) {
-          setShowAccessibilityModal(false);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showKeyboardShortcuts, showAccessibilityModal]);
-
-  // Save new accessibility preferences to localStorage
-  useEffect(() => {
-    localStorage.setItem('hide-images', hideImages.toString());
-  }, [hideImages]);
-
-  useEffect(() => {
-    localStorage.setItem('readable-fonts', readableFonts.toString());
-  }, [readableFonts]);
-
-  useEffect(() => {
-    localStorage.setItem('dyslexic-font', dyslexicFont.toString());
-  }, [dyslexicFont]);
-
-  useEffect(() => {
-    localStorage.setItem('bionic-reading', bionicReading.toString());
-  }, [bionicReading]);
-
-  useEffect(() => {
-    localStorage.setItem('stop-animations', stopAnimations.toString());
-  }, [stopAnimations]);
-
-  useEffect(() => {
-    localStorage.setItem('invert-colors', invertColors.toString());
-  }, [invertColors]);
-
-  useEffect(() => {
-    localStorage.setItem('brightness', brightness.toString());
-  }, [brightness]);
-
-  useEffect(() => {
-    localStorage.setItem('contrast', contrast.toString());
-  }, [contrast]);
-
-  useEffect(() => {
-    localStorage.setItem('saturation', saturation.toString());
-  }, [saturation]);
-
-  useEffect(() => {
-    localStorage.setItem('color-filter', colorFilter);
-  }, [colorFilter]);
-
-  useEffect(() => {
-    localStorage.setItem('reading-line', readingLine.toString());
-  }, [readingLine]);
-
-  useEffect(() => {
-    localStorage.setItem('highlight-links', highlightLinks.toString());
-  }, [highlightLinks]);
-
-  useEffect(() => {
-    localStorage.setItem('reading-mask', readingMask.toString());
-  }, [readingMask]);
-
-  useEffect(() => {
-    localStorage.setItem('page-structure', pageStructure.toString());
-  }, [pageStructure]);
-
-  // Apply accessibility features
-  useEffect(() => {
-    const body = document.body;
-    const html = document.documentElement;
-
-    // Hide Images
-    if (hideImages) {
-      body.classList.add('hide-images');
-    } else {
-      body.classList.remove('hide-images');
-    }
-
-    // Readable Fonts
-    if (readableFonts) {
-      body.classList.add('readable-fonts');
-    } else {
-      body.classList.remove('readable-fonts');
-    }
-
-    // Dyslexic Font (separate from OpenDyslexic preference)
-    if (dyslexicFont) {
-      body.classList.add('dyslexic-font');
-    } else {
-      body.classList.remove('dyslexic-font');
-    }
-
-    // Bionic Reading
-    if (bionicReading) {
-      body.classList.add('bionic-reading');
-      // Apply bionic reading to text content
-      const applyBionicReading = () => {
-        const walker = document.createTreeWalker(
-          body,
-          NodeFilter.SHOW_TEXT,
-          null
-        );
-        let node;
-        const nodesToProcess: Node[] = [];
-        while (node = walker.nextNode()) {
-          if (node.nodeValue && node.nodeValue.trim().length > 0 && 
-              node.parentElement && 
-              !node.parentElement.classList.contains('bionic-processed') &&
-              node.parentElement.tagName !== 'SCRIPT' &&
-              node.parentElement.tagName !== 'STYLE') {
-            nodesToProcess.push(node);
-          }
-        }
-        nodesToProcess.forEach(textNode => {
-          const parent = textNode.parentElement;
-          if (parent && !parent.classList.contains('bionic-processed')) {
-            const text = textNode.nodeValue || '';
-            const words = text.split(/(\s+)/);
-            const fragment = document.createDocumentFragment();
-            words.forEach(word => {
-              if (word.trim().length > 0) {
-                const boldLength = Math.ceil(word.length / 2);
-                const boldPart = word.substring(0, boldLength);
-                const restPart = word.substring(boldLength);
-                const span = document.createElement('span');
-                span.innerHTML = `<strong class="bionic-word">${boldPart}</strong><span class="bionic-rest">${restPart}</span>`;
-                fragment.appendChild(span);
-              } else {
-                fragment.appendChild(document.createTextNode(word));
-              }
-            });
-            parent.replaceChild(fragment, textNode);
-            parent.classList.add('bionic-processed');
-          }
-        });
-      };
-      setTimeout(applyBionicReading, 100);
-    } else {
-      body.classList.remove('bionic-reading');
-      // Remove bionic reading formatting
-      const bionicElements = body.querySelectorAll('.bionic-processed');
-      bionicElements.forEach(el => {
-        const text = el.textContent || '';
-        el.classList.remove('bionic-processed');
-        el.innerHTML = text;
-      });
-    }
-
-    // Stop Animations
-    if (stopAnimations) {
-      html.style.setProperty('--animation-duration', '0s');
-      html.style.setProperty('--transition-duration', '0s');
-      body.classList.add('stop-animations');
-    } else {
-      html.style.removeProperty('--animation-duration');
-      html.style.removeProperty('--transition-duration');
-      body.classList.remove('stop-animations');
-    }
-
-    // Brightness, Contrast, Saturation, Color Filters
-    let filterString = '';
-    if (invertColors) {
-      filterString += 'invert(1) ';
-    }
-    if (brightness !== 100) {
-      filterString += `brightness(${brightness}%) `;
-    }
-    if (contrast !== 100) {
-      filterString += `contrast(${contrast}%) `;
-    }
-    if (saturation !== 100) {
-      filterString += `saturate(${saturation}%) `;
-    }
-    if (colorFilter !== 'none') {
-      switch (colorFilter) {
-        case 'grayscale':
-          filterString += 'grayscale(100%) ';
-          break;
-        case 'red-green':
-          filterString += 'url(#protanopia) ';
-          break;
-        case 'blue-yellow':
-          filterString += 'url(#tritanopia) ';
-          break;
-        case 'green-red':
-          filterString += 'url(#deuteranopia) ';
-          break;
-      }
-    }
-    if (filterString) {
-      html.style.setProperty('filter', filterString.trim());
-      body.classList.add('accessibility-filters');
-    } else {
-      html.style.removeProperty('filter');
-      body.classList.remove('accessibility-filters');
-    }
-
-    // Invert Colors class for additional styling
-    if (invertColors) {
-      body.classList.add('invert-colors');
-    } else {
-      body.classList.remove('invert-colors');
-    }
-
-    // Reading Line
-    let handleMouseMove: ((e: MouseEvent) => void) | null = null;
-    if (readingLine) {
-      body.classList.add('reading-line');
-      handleMouseMove = (e: MouseEvent) => {
-        document.documentElement.style.setProperty('--reading-line-y', `${e.clientY}px`);
-      };
-      document.addEventListener('mousemove', handleMouseMove);
-    } else {
-      body.classList.remove('reading-line');
-      document.documentElement.style.removeProperty('--reading-line-y');
-    }
-    
-    return () => {
-      if (handleMouseMove) {
-        document.removeEventListener('mousemove', handleMouseMove);
-      }
-      body.classList.remove('reading-line');
-      document.documentElement.style.removeProperty('--reading-line-y');
-    };
-
-    // Highlight Links
-    if (highlightLinks) {
-      body.classList.add('highlight-links');
-    } else {
-      body.classList.remove('highlight-links');
-    }
-
-    // Reading Mask
-    if (readingMask) {
-      body.classList.add('reading-mask');
-    } else {
-      body.classList.remove('reading-mask');
-    }
-
-    // Page Structure
-    if (pageStructure) {
-      body.classList.add('show-page-structure');
-    } else {
-      body.classList.remove('show-page-structure');
-    }
-  }, [hideImages, readableFonts, dyslexicFont, bionicReading, stopAnimations, invertColors, brightness, contrast, saturation, colorFilter, readingLine, highlightLinks, readingMask, pageStructure]);
-
-  // Text Reader function
-  const readPage = () => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance();
-      utterance.text = document.body.innerText;
-      utterance.lang = 'en-US';
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      window.speechSynthesis.speak(utterance);
-    } else {
-      alert('Text-to-speech is not supported in your browser.');
-    }
-  };
 
   // Fetch learning reports
   useEffect(() => {
@@ -709,6 +344,93 @@ export function StudentHome() {
   useEffect(() => {
     fetchConnections();
   }, [currentUser]);
+
+  // Fetch assignments for this student
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      if (!currentUser) return;
+
+      try {
+        setLoadingAssignments(true);
+        // Try query with orderBy first, but if it fails (no index), fall back to simple query
+        try {
+          const studentAssignments = await getAssignmentsByStudent(currentUser.uid);
+          console.log('Fetched assignments for student:', studentAssignments.length, studentAssignments);
+          setAssignments(studentAssignments);
+        } catch (queryError: any) {
+          // If orderBy fails (likely missing index), try without it
+          console.warn('Query with orderBy failed, trying without orderBy:', queryError);
+          const assignmentsQuery = fsQuery(
+            collection(db, 'assignments'),
+            where('assignedStudentIds', 'array-contains', currentUser.uid)
+          );
+          const snapshot = await getDocs(assignmentsQuery);
+          const assignments = snapshot.docs.map(doc => ({
+            assignmentId: doc.id,
+            ...doc.data(),
+          })) as Assignment[];
+          // Sort manually by createdAt
+          assignments.sort((a, b) => {
+            const aTime = a.createdAt ? (a.createdAt as Timestamp).seconds : 0;
+            const bTime = b.createdAt ? (b.createdAt as Timestamp).seconds : 0;
+            return bTime - aTime;
+          });
+          console.log('Fetched assignments (without orderBy):', assignments.length, assignments);
+          setAssignments(assignments);
+          
+          if (queryError?.code === 'failed-precondition') {
+            console.error('Firestore index required. Please create a composite index for:');
+            console.error('Collection: assignments');
+            console.error('Fields: assignedStudentIds (Array), createdAt (Descending)');
+          }
+        }
+      } catch (error: any) {
+        console.error('Error fetching assignments:', error);
+        console.error('Error code:', error?.code);
+        console.error('Error message:', error?.message);
+        setAssignments([]);
+      } finally {
+        setLoadingAssignments(false);
+      }
+    };
+
+    fetchAssignments();
+  }, [currentUser]);
+
+  // Load MCQ set titles for assignments
+  useEffect(() => {
+    const loadMcqSetTitles = async () => {
+      if (assignments.length === 0) return;
+
+      try {
+        setLoadingMcqSets(true);
+        const mcqSetIds = [...new Set(assignments.map(a => a.mcqSetId))];
+        const mcqSetData: Record<string, { title: string }> = {};
+
+        await Promise.all(
+          mcqSetIds.map(async (mcqSetId) => {
+            try {
+              const mcqSetDoc = await getDoc(doc(db, 'mcqSets', mcqSetId));
+              if (mcqSetDoc.exists()) {
+                mcqSetData[mcqSetId] = { title: mcqSetDoc.data().title || 'Untitled Assignment' };
+              }
+            } catch (error) {
+              console.error(`Error loading MCQ set ${mcqSetId}:`, error);
+              mcqSetData[mcqSetId] = { title: 'Unknown Assignment' };
+            }
+          })
+        );
+
+        setAssignmentMcqSets(mcqSetData);
+      } catch (error) {
+        console.error('Error loading MCQ set titles:', error);
+      } finally {
+        setLoadingMcqSets(false);
+      }
+    };
+
+    loadMcqSetTitles();
+  }, [assignments]);
 
   async function handleTeacherSearch(e?: React.FormEvent<HTMLFormElement>) {
     if (e) e.preventDefault();
@@ -936,37 +658,20 @@ export function StudentHome() {
     }
   };
 
-  // Respect reduced motion preference
-  const motionVariants = reducedMotion ? {
-    containerVariants: { hidden: { opacity: 1 }, visible: { opacity: 1 } },
-    itemVariants: { hidden: { opacity: 1 }, visible: { opacity: 1 } },
-    cardVariants: { hidden: { opacity: 1 }, visible: { opacity: 1 } }
-  } : {
-    containerVariants,
-    itemVariants,
-    cardVariants
-  };
-
   return (
-    <>
-      {/* ARIA Live Region for Announcements */}
-      <div 
-        aria-live="polite" 
-        aria-atomic="true" 
-        className="sr-only"
-        id="announcements"
-      />
-
-      <motion.div
-        className={`home-container spacing-${spacing}`}
-        initial="hidden"
-        animate="visible"
-        variants={motionVariants.containerVariants}
-      >
+    <motion.div
+      className="home-container"
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+    >
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <motion.header
         className="home-header"
         role="banner"
-        variants={motionVariants.itemVariants}
+        variants={itemVariants}
       >
         <motion.h1
           initial={{ scale: 0.9, opacity: 0 }}
@@ -1039,8 +744,24 @@ export function StudentHome() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400 }}
+            style={{
+              padding: '14px',
+              background: 'linear-gradient(135deg, #FF6B6B 0%, #FF3B30 50%, #FF6B6B 100%)',
+              color: 'white',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '12px',
+              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+              cursor: 'pointer',
+              minWidth: '44px',
+              minHeight: '44px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
+              transition: 'all 0.3s ease'
+            }}
           >
-            Logout
+            🚪
           </motion.button>
         </div>
       </motion.header>
@@ -1083,23 +804,130 @@ export function StudentHome() {
           >
             Ready to learn? Let's start your learning adventure! 🌟
           </motion.p>
-          <motion.button
-            onClick={() => { setNavigating(true); navigate('/learn'); }}
-            className="logout-button"
-            aria-label="Start your learning"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 400 }}
-            style={{ marginTop: '0.75rem' }}
-          >
-            Start Your Learning
-          </motion.button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '0.75rem' }}>
+            <motion.button
+              onClick={() => { setNavigating(true); navigate('/learn'); }}
+              className="logout-button"
+              aria-label="Demo version"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400 }}
+            >
+              Demo Version
+            </motion.button>
+            <motion.button
+              onClick={() => {
+                if (assignments.length === 0) {
+                  alert('You don\'t have any assignments yet. Your teachers will assign MCQ practice sets to you.');
+                  return;
+                }
+                setShowAssignmentModal(true);
+              }}
+              className="logout-button"
+              aria-label="Start practice"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400 }}
+              style={{ 
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
+              }}
+            >
+              Start Practice
+            </motion.button>
+          </div>
         </motion.div>
+
+        {/* Assignments Section */}
+        <motion.section
+          className="reports-history"
+          aria-labelledby="assignments-heading"
+          variants={itemVariants}
+        >
+          <h3 id="assignments-heading">📋 My Assignments</h3>
+          {loadingAssignments ? (
+            <div className="reports-empty">
+              <p>Loading assignments...</p>
+            </div>
+          ) : assignments.length === 0 ? (
+            <div className="reports-empty">
+              <p>You don't have any assignments yet.</p>
+              <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
+                Your teachers will assign MCQ practice sets here.
+              </p>
+            </div>
+          ) : (
+            <div className="reports-grid">
+              {assignments.map((assignment) => {
+                const dueDate = assignment.dueDate 
+                  ? new Date((assignment.dueDate as Timestamp).seconds * 1000)
+                  : null;
+                const isOverdue = dueDate && dueDate < new Date();
+                const isDueSoon = dueDate && dueDate.getTime() - Date.now() < 24 * 60 * 60 * 1000 && !isOverdue;
+
+                return (
+                  <motion.div
+                    key={assignment.assignmentId}
+                    className="report-card"
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
+                  >
+                    <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>📋</div>
+                    <h4>Assignment</h4>
+                    {dueDate && (
+                      <p style={{ 
+                        color: isOverdue ? 'var(--error-color)' : isDueSoon ? '#ff9800' : 'var(--text-secondary)', 
+                        marginBottom: 'var(--spacing-sm)',
+                        fontWeight: isOverdue || isDueSoon ? 600 : 400
+                      }}>
+                        Due: {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isOverdue && ' (Overdue)'}
+                        {isDueSoon && ' (Due Soon)'}
+                      </p>
+                    )}
+                    {assignment.settings.timeLimit && (
+                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-sm)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
+                        Time Limit: {assignment.settings.timeLimit} minutes
+                      </p>
+                    )}
+                    {assignment.settings.attemptLimit && (
+                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-sm)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
+                        Attempts: {assignment.settings.attemptLimit} max
+                      </p>
+                    )}
+                    {(assignment.settings.shuffleQuestions || assignment.settings.shuffleOptions) && (
+                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
+                        {assignment.settings.shuffleQuestions && '🔄 Shuffled Questions '}
+                        {assignment.settings.shuffleOptions && '🔄 Shuffled Options'}
+                      </p>
+                    )}
+                    <motion.button
+                      className="logout-button"
+                      style={{ 
+                        marginTop: 'var(--spacing-md)', 
+                        width: '100%',
+                        background: isOverdue 
+                          ? 'linear-gradient(135deg, var(--error-color) 0%, #d32f2f 100%)'
+                          : 'linear-gradient(135deg, var(--primary-color) 0%, #4169E1 100%)'
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {isOverdue ? '⚠️ Start Assignment (Overdue)' : '▶️ Start Assignment'}
+                    </motion.button>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </motion.section>
 
         <motion.section
           className="accessibility-controls"
           aria-labelledby="find-teachers-heading"
-          variants={motionVariants.itemVariants}
+          variants={itemVariants}
         >
           <h3 id="find-teachers-heading">Find Your Teachers 👩‍🏫</h3>
           <form onSubmit={handleTeacherSearch} style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'stretch', flexWrap: 'wrap' }}>
@@ -1135,7 +963,7 @@ export function StudentHome() {
                   <motion.div 
                     key={teacher.uid} 
                     className="feature-card" 
-                    variants={motionVariants.cardVariants} 
+                    variants={cardVariants} 
                     initial="hidden" 
                     animate="visible"
                     whileHover={{ y: -5, scale: 1.02, boxShadow: "0 8px 20px rgba(0,0,0,0.12)" }}
@@ -1172,7 +1000,7 @@ export function StudentHome() {
         <motion.section
           className="reports-history"
           aria-labelledby="requests-heading"
-          variants={motionVariants.itemVariants}
+          variants={itemVariants}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
             <h3 id="requests-heading" style={{ margin: 0 }}>📬 Connection Requests</h3>
@@ -1206,7 +1034,7 @@ export function StudentHome() {
                     <motion.div
                       key={request.id}
                       className="report-card"
-                      variants={motionVariants.cardVariants}
+                      variants={cardVariants}
                       initial="hidden"
                       animate="visible"
                       whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
@@ -1253,7 +1081,7 @@ export function StudentHome() {
                     <motion.div
                       key={request.id}
                       className="report-card"
-                      variants={motionVariants.cardVariants}
+                      variants={cardVariants}
                       initial="hidden"
                       animate="visible"
                       whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
@@ -1281,7 +1109,7 @@ export function StudentHome() {
                     <motion.div
                       key={request.id}
                       className="report-card"
-                      variants={motionVariants.cardVariants}
+                      variants={cardVariants}
                       initial="hidden"
                       animate="visible"
                       whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
@@ -1328,7 +1156,7 @@ export function StudentHome() {
                     <motion.div
                       key={request.id}
                       className="report-card"
-                      variants={motionVariants.cardVariants}
+                      variants={cardVariants}
                       initial="hidden"
                       animate="visible"
                       whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
@@ -1352,7 +1180,7 @@ export function StudentHome() {
         <motion.section
           className="reports-history"
           aria-labelledby="your-teachers-heading"
-          variants={motionVariants.itemVariants}
+          variants={itemVariants}
         >
           <h3 id="your-teachers-heading">Your Teachers 👩‍🏫</h3>
           {myTeachers.length === 0 ? (
@@ -1368,7 +1196,7 @@ export function StudentHome() {
                 <motion.div
                   key={connection.id}
                   className="report-card"
-                  variants={motionVariants.cardVariants}
+                  variants={cardVariants}
                   initial="hidden"
                   animate="visible"
                   whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
@@ -1386,7 +1214,7 @@ export function StudentHome() {
         <motion.section
           className="reports-history"
           aria-labelledby="your-parents-heading"
-          variants={motionVariants.itemVariants}
+          variants={itemVariants}
         >
           <h3 id="your-parents-heading">Your Parents 👨‍👩‍👧‍👦</h3>
           {myParents.length === 0 ? (
@@ -1402,7 +1230,7 @@ export function StudentHome() {
                 <motion.div
                   key={connection.id}
                   className="report-card"
-                  variants={motionVariants.cardVariants}
+                  variants={cardVariants}
                   initial="hidden"
                   animate="visible"
                   whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
@@ -1416,474 +1244,69 @@ export function StudentHome() {
           )}
         </motion.section>
 
-        {/* Accessibility Settings Modal */}
-        {showAccessibilityModal && (
-          <div 
-            className="modal-overlay" 
-            onClick={() => setShowAccessibilityModal(false)}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="accessibility-heading"
-          >
-            <div className="accessibility-settings-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2 id="accessibility-heading">
-                  <span className="accessibility-icon">⚙️</span>
-                  Accessibility Settings
-                </h2>
-                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                  <button
-                    onClick={() => setShowKeyboardShortcuts(!showKeyboardShortcuts)}
-                    className="keyboard-shortcuts-button"
-                    aria-label="Show keyboard shortcuts"
-                    title="Keyboard shortcuts (Ctrl/Cmd + /)"
-                  >
-                    ⌨️
-                  </button>
-                  <button
-                    onClick={() => setShowAccessibilityModal(false)}
-                    className="close-modal-button"
-                    aria-label="Close accessibility settings"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-              
-              <div className="accessibility-controls-content">
-                {/* Font Options Section */}
-                <div className="accessibility-section">
-                  <h4 className="section-title">Font Options</h4>
-                  <div className="accessibility-buttons-grid">
-                    <button
-                      className={`accessibility-feature-button ${hideImages ? 'active' : ''}`}
-                      onClick={() => setHideImages(!hideImages)}
-                      aria-pressed={hideImages}
-                    >
-                      <span className="button-icon">🖼️</span>
-                      <span className="button-text">Hide Images</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${readableFonts ? 'active' : ''}`}
-                      onClick={() => setReadableFonts(!readableFonts)}
-                      aria-pressed={readableFonts}
-                    >
-                      <span className="button-icon">📖</span>
-                      <span className="button-text">Readable Fonts</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${dyslexicFont ? 'active' : ''}`}
-                      onClick={() => setDyslexicFont(!dyslexicFont)}
-                      aria-pressed={dyslexicFont}
-                    >
-                      <span className="button-icon">Aa</span>
-                      <span className="button-text">Dyslexic Font</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${bionicReading ? 'active' : ''}`}
-                      onClick={() => setBionicReading(!bionicReading)}
-                      aria-pressed={bionicReading}
-                    >
-                      <span className="button-icon">AA</span>
-                      <span className="button-text">Bionic Reading</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${stopAnimations ? 'active' : ''}`}
-                      onClick={() => setStopAnimations(!stopAnimations)}
-                      aria-pressed={stopAnimations}
-                    >
-                      <span className="button-icon">⏸️</span>
-                      <span className="button-text">Stop Animations</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Colors Section */}
-                <div className="accessibility-section">
-                  <h4 className="section-title">Colors</h4>
-                  <div className="accessibility-buttons-grid">
-                    <button
-                      className={`accessibility-feature-button ${invertColors ? 'active' : ''}`}
-                      onClick={() => setInvertColors(!invertColors)}
-                      aria-pressed={invertColors}
-                    >
-                      <span className="button-icon">🔄</span>
-                      <span className="button-text">Invert Colors</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${brightness !== 100 ? 'active' : ''}`}
-                      onClick={() => setShowBrightnessModal(true)}
-                    >
-                      <span className="button-icon">☀️</span>
-                      <span className="button-text">Brightness</span>
-                      {brightness !== 100 && <span className="button-value">{brightness}%</span>}
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${contrast !== 100 ? 'active' : ''}`}
-                      onClick={() => setShowContrastModal(true)}
-                    >
-                      <span className="button-icon">◐</span>
-                      <span className="button-text">Contrast</span>
-                      {contrast !== 100 && <span className="button-value">{contrast}%</span>}
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${saturation !== 100 ? 'active' : ''}`}
-                      onClick={() => setShowSaturationModal(true)}
-                    >
-                      <span className="button-icon">💧</span>
-                      <span className="button-text">Saturation</span>
-                      {saturation !== 100 && <span className="button-value">{saturation}%</span>}
-                    </button>
-                  </div>
-                  
-                  {/* Color Filters */}
-                  <div className="color-filters-group">
-                    <label className="filters-label">Color Filters:</label>
-                    <div className="color-filters-options">
-                      <button
-                        className={`color-filter-option ${colorFilter === 'none' ? 'active' : ''}`}
-                        onClick={() => setColorFilter('none')}
-                        aria-pressed={colorFilter === 'none'}
-                        title="None"
-                      >
-                        <span className="filter-circle" style={{ background: 'linear-gradient(45deg, #ff0000, #00ff00, #0000ff)' }}></span>
-                      </button>
-                      <button
-                        className={`color-filter-option ${colorFilter === 'grayscale' ? 'active' : ''}`}
-                        onClick={() => setColorFilter('grayscale')}
-                        aria-pressed={colorFilter === 'grayscale'}
-                        title="Grayscale"
-                      >
-                        <span className="filter-circle" style={{ background: '#808080' }}></span>
-                      </button>
-                      <button
-                        className={`color-filter-option ${colorFilter === 'red-green' ? 'active' : ''}`}
-                        onClick={() => setColorFilter('red-green')}
-                        aria-pressed={colorFilter === 'red-green'}
-                        title="Red/Green"
-                      >
-                        <span className="filter-circle" style={{ background: 'linear-gradient(45deg, #ff0000, #00ff00)' }}></span>
-                      </button>
-                      <button
-                        className={`color-filter-option ${colorFilter === 'blue-yellow' ? 'active' : ''}`}
-                        onClick={() => setColorFilter('blue-yellow')}
-                        aria-pressed={colorFilter === 'blue-yellow'}
-                        title="Blue/Yellow"
-                      >
-                        <span className="filter-circle" style={{ background: 'linear-gradient(45deg, #0000ff, #ffff00)' }}></span>
-                      </button>
-                      <button
-                        className={`color-filter-option ${colorFilter === 'green-red' ? 'active' : ''}`}
-                        onClick={() => setColorFilter('green-red')}
-                        aria-pressed={colorFilter === 'green-red'}
-                        title="Green/Red"
-                      >
-                        <span className="filter-circle" style={{ background: 'linear-gradient(45deg, #00ff00, #ff0000)' }}></span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Navigation Section */}
-                <div className="accessibility-section">
-                  <h4 className="section-title">Navigation</h4>
-                  <div className="accessibility-buttons-grid">
-                    <button
-                      className={`accessibility-feature-button ${readingLine ? 'active' : ''}`}
-                      onClick={() => setReadingLine(!readingLine)}
-                      aria-pressed={readingLine}
-                    >
-                      <span className="button-icon">➖</span>
-                      <span className="button-text">Reading Line</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${highlightLinks ? 'active' : ''}`}
-                      onClick={() => setHighlightLinks(!highlightLinks)}
-                      aria-pressed={highlightLinks}
-                    >
-                      <span className="button-icon">🔗</span>
-                      <span className="button-text">Highlight Links</span>
-                    </button>
-                    <button
-                      className="accessibility-feature-button"
-                      onClick={readPage}
-                    >
-                      <span className="button-icon">🔊</span>
-                      <span className="button-text">Read Page</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${readingMask ? 'active' : ''}`}
-                      onClick={() => setReadingMask(!readingMask)}
-                      aria-pressed={readingMask}
-                    >
-                      <span className="button-icon">🎭</span>
-                      <span className="button-text">Reading Mask</span>
-                    </button>
-                    <button
-                      className={`accessibility-feature-button ${pageStructure ? 'active' : ''}`}
-                      onClick={() => setPageStructure(!pageStructure)}
-                      aria-pressed={pageStructure}
-                    >
-                      <span className="button-icon">📋</span>
-                      <span className="button-text">Page Structure</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Additional Settings (Collapsible) */}
-                <div className="accessibility-section">
-                  <details className="additional-settings">
-                    <summary className="section-title">Additional Settings</summary>
-                    <div className="additional-controls">
-                      <div className="control-group">
-                        <label htmlFor="text-size">
-                          <span>Text Size: {Math.round(textSize * 100)}%</span>
-                          <input
-                            type="range"
-                            id="text-size"
-                            min="0.875"
-                            max="1.5"
-                            step="0.125"
-                            value={textSize}
-                            onChange={(e) => setTextSize(parseFloat(e.target.value))}
-                            aria-label="Text size adjustment"
-                            aria-valuemin={0.875}
-                            aria-valuemax={1.5}
-                            aria-valuenow={textSize}
-                          />
-                        </label>
-                      </div>
-
-                      <div className="control-group">
-                        <label htmlFor="high-contrast">
-                          <input
-                            type="checkbox"
-                            id="high-contrast"
-                            checked={highContrast}
-                            onChange={(e) => setHighContrast(e.target.checked)}
-                            aria-label="Enable high contrast mode"
-                          />
-                          <span>High Contrast Mode</span>
-                        </label>
-                      </div>
-
-                      <div className="control-group">
-                        <label htmlFor="font-preference">Font</label>
-                        <div className="setting-options">
-                          <button
-                            id="font-default"
-                            className={`setting-option ${fontPreference === 'default' ? 'active' : ''}`}
-                            onClick={() => setFontPreference('default')}
-                            aria-pressed={fontPreference === 'default'}
-                          >
-                            Default
-                          </button>
-                          <button
-                            id="font-opendyslexic"
-                            className={`setting-option ${fontPreference === 'opendyslexic' ? 'active' : ''}`}
-                            onClick={() => setFontPreference('opendyslexic')}
-                            aria-pressed={fontPreference === 'opendyslexic'}
-                          >
-                            OpenDyslexic
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="control-group">
-                        <label htmlFor="reduced-motion">
-                          <input
-                            type="checkbox"
-                            id="reduced-motion"
-                            checked={reducedMotion}
-                            onChange={(e) => setReducedMotion(e.target.checked)}
-                            aria-label="Enable reduced motion"
-                          />
-                          <span>Reduced Motion</span>
-                        </label>
-                      </div>
-
-                      <div className="control-group">
-                        <label htmlFor="spacing">Layout Spacing</label>
-                        <div className="setting-options">
-                          <button
-                            id="spacing-compact"
-                            className={`setting-option ${spacing === 'compact' ? 'active' : ''}`}
-                            onClick={() => setSpacing('compact')}
-                            aria-pressed={spacing === 'compact'}
-                          >
-                            Compact
-                          </button>
-                          <button
-                            id="spacing-comfortable"
-                            className={`setting-option ${spacing === 'comfortable' ? 'active' : ''}`}
-                            onClick={() => setSpacing('comfortable')}
-                            aria-pressed={spacing === 'comfortable'}
-                          >
-                            Comfortable
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
-                  </details>
-                </div>
-
-                {/* Bottom Actions */}
-                <div className="accessibility-actions">
-                  <button
-                    className="reset-settings-button"
-                    onClick={() => {
-                      setTextSize(1);
-                      setHighContrast(false);
-                      setFontPreference('default');
-                      setReducedMotion(false);
-                      setSpacing('comfortable');
-                      setHideImages(false);
-                      setReadableFonts(false);
-                      setDyslexicFont(false);
-                      setBionicReading(false);
-                      setStopAnimations(false);
-                      setInvertColors(false);
-                      setBrightness(100);
-                      setContrast(100);
-                      setSaturation(100);
-                      setColorFilter('none');
-                      setReadingLine(false);
-                      setHighlightLinks(false);
-                      setReadingMask(false);
-                      setPageStructure(false);
-                    }}
-                  >
-                    🔄 Reset Settings
-                  </button>
-                </div>
-
-                {/* Slider Modals */}
-                {showBrightnessModal && (
-                  <div className="slider-modal-overlay" onClick={() => setShowBrightnessModal(false)}>
-                    <div className="slider-modal" onClick={(e) => e.stopPropagation()}>
-                      <div className="slider-modal-content">
-                        <h5>Brightness</h5>
-                        <input
-                          type="range"
-                          min="50"
-                          max="200"
-                          step="10"
-                          value={brightness}
-                          onChange={(e) => setBrightness(parseFloat(e.target.value))}
-                          aria-label="Adjust brightness"
-                        />
-                        <span>{brightness}%</span>
-                        <button onClick={() => setShowBrightnessModal(false)}>Done</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {showContrastModal && (
-                  <div className="slider-modal-overlay" onClick={() => setShowContrastModal(false)}>
-                    <div className="slider-modal" onClick={(e) => e.stopPropagation()}>
-                      <div className="slider-modal-content">
-                        <h5>Contrast</h5>
-                        <input
-                          type="range"
-                          min="50"
-                          max="200"
-                          step="10"
-                          value={contrast}
-                          onChange={(e) => setContrast(parseFloat(e.target.value))}
-                          aria-label="Adjust contrast"
-                        />
-                        <span>{contrast}%</span>
-                        <button onClick={() => setShowContrastModal(false)}>Done</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {showSaturationModal && (
-                  <div className="slider-modal-overlay" onClick={() => setShowSaturationModal(false)}>
-                    <div className="slider-modal" onClick={(e) => e.stopPropagation()}>
-                      <div className="slider-modal-content">
-                        <h5>Saturation</h5>
-                        <input
-                          type="range"
-                          min="0"
-                          max="200"
-                          step="10"
-                          value={saturation}
-                          onChange={(e) => setSaturation(parseFloat(e.target.value))}
-                          aria-label="Adjust saturation"
-                        />
-                        <span>{saturation}%</span>
-                        <button onClick={() => setShowSaturationModal(false)}>Done</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+        <motion.section
+          className="accessibility-controls"
+          aria-labelledby="accessibility-heading"
+          variants={itemVariants}
+          whileHover={{ y: -2 }}
+          transition={{ type: "spring", stiffness: 300 }}
+        >
+          <h3 id="accessibility-heading">Accessibility Settings</h3>
+          
+          <div className="control-group">
+            <label htmlFor="text-size">
+              <motion.input
+                type="range"
+                id="text-size"
+                min="0.875"
+                max="1.5"
+                step="0.125"
+                value={textSize}
+                onChange={(e) => setTextSize(parseFloat(e.target.value))}
+                aria-label="Text size adjustment"
+                aria-valuemin={0.875}
+                aria-valuemax={1.5}
+                aria-valuenow={textSize}
+                whileFocus={{ scale: 1.05 }}
+              />
+              <span>Text Size: {Math.round(textSize * 100)}%</span>
+            </label>
+            <motion.span
+              className="range-label"
+              aria-live="polite"
+              key={textSize}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              Current size: {Math.round(textSize * 100)}% ({textSize < 1 ? 'Smaller' : textSize > 1 ? 'Larger' : 'Default'})
+            </motion.span>
           </div>
-        )}
 
-        {/* Keyboard Shortcuts Modal */}
-        {showKeyboardShortcuts && (
-          <div 
-            className="modal-overlay" 
-            onClick={() => setShowKeyboardShortcuts(false)}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="shortcuts-heading"
-          >
-            <div className="keyboard-shortcuts-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2 id="shortcuts-heading">Keyboard Shortcuts</h2>
-                <button
-                  onClick={() => setShowKeyboardShortcuts(false)}
-                  className="close-modal-button"
-                  aria-label="Close keyboard shortcuts"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="shortcuts-list">
-                <div className="shortcut-item">
-                  <kbd>Ctrl</kbd> + <kbd>/</kbd> or <kbd>Cmd</kbd> + <kbd>/</kbd>
-                  <span>Show/hide keyboard shortcuts</span>
-                </div>
-                <div className="shortcut-item">
-                  <kbd>Esc</kbd>
-                  <span>Close modal or cancel action</span>
-                </div>
-                <div className="shortcut-item">
-                  <kbd>Tab</kbd>
-                  <span>Navigate between interactive elements</span>
-                </div>
-                <div className="shortcut-item">
-                  <kbd>Enter</kbd>
-                  <span>Activate button or submit form</span>
-                </div>
-                <div className="shortcut-item">
-                  <kbd>Space</kbd>
-                  <span>Toggle checkbox or activate button</span>
-                </div>
-                <div className="shortcut-item">
-                  <kbd>Arrow Keys</kbd>
-                  <span>Navigate lists and options</span>
-                </div>
-              </div>
-            </div>
+          <div className="control-group">
+            <label htmlFor="high-contrast">
+              <motion.input
+                type="checkbox"
+                id="high-contrast"
+                checked={highContrast}
+                onChange={(e) => setHighContrast(e.target.checked)}
+                aria-label="Enable high contrast mode"
+                whileTap={{ scale: 0.95 }}
+              />
+              <span>High Contrast Mode</span>
+            </label>
+            <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Increases contrast for better visibility
+            </p>
           </div>
-        )}
+        </motion.section>
 
         {/* Learning Reports History Section */}
         <motion.section
-          id="reports-section"
           className="reports-history"
           aria-labelledby="reports-heading"
-          variants={motionVariants.itemVariants}
-          whileHover={reducedMotion ? {} : { y: -2 }}
-          transition={reducedMotion ? {} : { type: "spring", stiffness: 300 }}
+          variants={itemVariants}
+          whileHover={{ y: -2 }}
+          transition={{ type: "spring", stiffness: 300 }}
         >
           <h3 id="reports-heading">📊 Your Learning Reports History</h3>
           
@@ -1912,7 +1335,7 @@ export function StudentHome() {
                 <motion.div
                   key={report.id}
                   className="report-card"
-                  variants={motionVariants.cardVariants}
+                  variants={cardVariants}
                   initial="hidden"
                   animate="visible"
                   transition={{ delay: index * 0.1 }}
@@ -1966,9 +1389,173 @@ export function StudentHome() {
             </div>
           )}
         </motion.section>
+
+        {/* Assignment Selection Modal */}
+        {showAssignmentModal && (
+          <div 
+            className="modal-overlay" 
+            onClick={() => setShowAssignmentModal(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="assignment-modal-heading"
+          >
+            <div className="accessibility-settings-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+              <div className="modal-header">
+                <h2 id="assignment-modal-heading">
+                  <span className="accessibility-icon">📋</span>
+                  Select an Assignment
+                </h2>
+                <button
+                  onClick={() => setShowAssignmentModal(false)}
+                  className="close-modal-button"
+                  aria-label="Close assignment selection"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="accessibility-controls-content" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                {loadingMcqSets ? (
+                  <div style={{ padding: 'var(--spacing-lg)', textAlign: 'center' }}>
+                    <p>Loading assignments...</p>
+                  </div>
+                ) : assignments.length === 0 ? (
+                  <div style={{ padding: 'var(--spacing-lg)', textAlign: 'center' }}>
+                    <p>You don't have any assignments yet.</p>
+                    <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)' }}>
+                      Your teachers will assign MCQ practice sets to you.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                    {assignments.map((assignment) => {
+                      const dueDate = assignment.dueDate 
+                        ? new Date((assignment.dueDate as Timestamp).seconds * 1000)
+                        : null;
+                      const isOverdue = dueDate && dueDate < new Date();
+                      const isDueSoon = dueDate && dueDate.getTime() - Date.now() < 24 * 60 * 60 * 1000 && !isOverdue;
+                      const mcqSetTitle = assignmentMcqSets[assignment.mcqSetId]?.title || 'Loading...';
+
+                      return (
+                        <motion.button
+                          key={assignment.assignmentId}
+                          onClick={() => {
+                            setNavigating(true);
+                            navigate(`/practice?assignmentId=${assignment.assignmentId}`);
+                          }}
+                          className="report-card"
+                          style={{
+                            textAlign: 'left',
+                            padding: 'var(--spacing-lg)',
+                            cursor: 'pointer',
+                            border: isOverdue ? '2px solid var(--error-color)' : isDueSoon ? '2px solid #ff9800' : '2px solid var(--border-color)',
+                            background: isOverdue ? 'rgba(255, 59, 48, 0.1)' : isDueSoon ? 'rgba(255, 152, 0, 0.1)' : 'var(--background)',
+                          }}
+                          whileHover={{ scale: 1.02, y: -2 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <h4 style={{ margin: '0 0 var(--spacing-sm) 0', color: 'var(--text-color)' }}>
+                            {mcqSetTitle}
+                          </h4>
+                          {dueDate && (
+                            <p style={{ 
+                              margin: '0 0 var(--spacing-xs) 0',
+                              color: isOverdue ? 'var(--error-color)' : isDueSoon ? '#ff9800' : 'var(--text-secondary)', 
+                              fontWeight: isOverdue || isDueSoon ? 600 : 400,
+                              fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)'
+                            }}>
+                              Due: {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {isOverdue && ' (Overdue)'}
+                              {isDueSoon && ' (Due Soon)'}
+                            </p>
+                          )}
+                          {assignment.settings.timeLimit && (
+                            <p style={{ margin: '0 0 var(--spacing-xs) 0', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
+                              ⏱️ Time Limit: {assignment.settings.timeLimit} minutes
+                            </p>
+                          )}
+                          {assignment.settings.attemptLimit && (
+                            <p style={{ margin: '0 0 var(--spacing-xs) 0', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
+                              🔢 Attempts: {assignment.settings.attemptLimit} max
+                            </p>
+                          )}
+                          {(assignment.settings.shuffleQuestions || assignment.settings.shuffleOptions) && (
+                            <p style={{ margin: '0', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
+                              {assignment.settings.shuffleQuestions && '🔄 Shuffled Questions '}
+                              {assignment.settings.shuffleOptions && '🔄 Shuffled Options'}
+                            </p>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Accessibility Settings Modal */}
+        {showAccessibilityModal && (
+          <div 
+            className="modal-overlay" 
+            onClick={() => setShowAccessibilityModal(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="accessibility-heading"
+          >
+            <div className="accessibility-settings-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2 id="accessibility-heading">
+                  <span className="accessibility-icon">⚙️</span>
+                  Accessibility Settings
+                </h2>
+                <button
+                  onClick={() => setShowAccessibilityModal(false)}
+                  className="close-modal-button"
+                  aria-label="Close accessibility settings"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="accessibility-controls-content">
+                <div className="accessibility-section">
+                  <h4 className="section-title">Text & Display</h4>
+                  <div className="control-group">
+                    <label htmlFor="modal-text-size">
+                      <span>Text Size: {Math.round(textSize * 100)}%</span>
+                      <input
+                        type="range"
+                        id="modal-text-size"
+                        min="0.875"
+                        max="1.5"
+                        step="0.125"
+                        value={textSize}
+                        onChange={(e) => setTextSize(parseFloat(e.target.value))}
+                        aria-label="Text size adjustment"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="control-group">
+                    <label htmlFor="modal-high-contrast">
+                      <input
+                        type="checkbox"
+                        id="modal-high-contrast"
+                        checked={highContrast}
+                        onChange={(e) => setHighContrast(e.target.checked)}
+                        aria-label="Enable high contrast mode"
+                      />
+                      <span>High Contrast Mode</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </motion.div>
-    </>
   );
 }
-

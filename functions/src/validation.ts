@@ -27,7 +27,7 @@ export const messageSchema = z.object({
  * Validation middleware factory
  */
 export function validateRequest(schema: z.ZodSchema) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     try {
       // Validate request body and reject unknown fields
       const validated = schema.parse(req.body);
@@ -40,17 +40,19 @@ export function validateRequest(schema: z.ZodSchema) {
           return path ? `${path}: ${err.message}` : err.message;
         });
 
-        return res.status(400).json({
+        res.status(400).json({
           error: 'Validation failed',
           message: 'Invalid input data',
           details: errorMessages,
         });
+        return;
       }
       
-      return res.status(500).json({
+      res.status(500).json({
         error: 'Internal server error',
         message: 'An error occurred during validation',
       });
+      return;
     }
   };
 }

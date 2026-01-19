@@ -10,8 +10,10 @@ import { validateLoginInput } from '../utils/validation';
 
 // Convert icon array to password string with email for uniqueness
 function iconsToPassword(icons: string[], email: string): string {
+  // Normalize email: lowercase and trim to ensure consistency
+  const normalizedEmail = email.trim().toLowerCase();
   // Combine icons with email prefix to ensure uniqueness
-  const emailPrefix = email.split('@')[0] || '';
+  const emailPrefix = normalizedEmail.split('@')[0] || '';
   // Create password: emailPrefix-icon1-icon2-icon3
   return `${emailPrefix}-${icons.join('-')}`;
 }

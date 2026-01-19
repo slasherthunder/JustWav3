@@ -9,7 +9,9 @@ import { Home } from './pages/Home';
 import { Landing } from './pages/Landing';
 import { PageTransition } from './components/PageTransition';
 import { Learn } from './pages/Learn';
+import { Practice } from './pages/Practice';
 import { Messages } from './pages/Messages';
+import { CreateMCQ } from './pages/CreateMCQ';
 import { Loading } from './components/Loading';
 import './App.css';
 
@@ -48,6 +50,22 @@ function AnimatedRoutes() {
             element={
               <PrivateRoute>
                 <Messages />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/create-mcq"
+            element={
+              <PrivateRoute>
+                <CreateMCQ />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/practice"
+            element={
+              <PrivateRoute>
+                <Practice />
               </PrivateRoute>
             }
           />

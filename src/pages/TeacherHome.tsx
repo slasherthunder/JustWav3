@@ -8,7 +8,25 @@ import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { Timestamp } from 'firebase/firestore';
 import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
+import { createAssignment, notifyStudentsOfAssignment } from '../utils/assignments';
+import type { AssignmentSettings } from '../types/assignments';
 import './Home.css';
+
+interface MCQSet {
+  id: string;
+  title: string;
+  userId: string;
+  userEmail: string | null;
+  createdAt: Timestamp | { seconds: number; nanoseconds: number } | null;
+  slides: Array<{
+    question: string;
+    questionType: 'multipleChoice' | 'multipleCorrect';
+    options: string[];
+    correctAnswer: string;
+    correctAnswers: string[];
+    imageData: string | null;
+  }>;
+}
 
 interface ConnectionRequest {
   id: string;
@@ -133,6 +151,19 @@ export function TeacherHome() {
   // Notification counts
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  
+  // MCQ Sets state
+  const [mcqSets, setMcqSets] = useState<MCQSet[]>([]);
+  const [loadingMcqSets, setLoadingMcqSets] = useState(false);
+  const [selectedMcqSetForAssignment, setSelectedMcqSetForAssignment] = useState<MCQSet | null>(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignStudentIds, setAssignStudentIds] = useState<string[]>([]);
+  const [assignDueDate, setAssignDueDate] = useState('');
+  const [assignTimeLimit, setAssignTimeLimit] = useState<number | undefined>(undefined);
+  const [assignAttemptLimit, setAssignAttemptLimit] = useState<number | undefined>(undefined);
+  const [assignShuffleQuestions, setAssignShuffleQuestions] = useState(false);
+  const [assignShuffleOptions, setAssignShuffleOptions] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   // Fetch notification counts (unread messages and pending requests)
   useEffect(() => {
@@ -647,6 +678,185 @@ export function TeacherHome() {
     fetchConnections();
   }, [currentUser]);
 
+  // Fetch MCQ sets created by this teacher
+  useEffect(() => {
+    const fetchMcqSets = async () => {
+      if (!currentUser) return;
+
+      try {
+        setLoadingMcqSets(true);
+        // Try query with orderBy first, but if it fails (no index), fall back to simple query
+        try {
+          const mcqSetsQuery = fsQuery(
+            collection(db, 'mcqSets'),
+            where('userId', '==', currentUser.uid),
+            orderBy('createdAt', 'desc')
+          );
+          const mcqSetsSnapshot = await getDocs(mcqSetsQuery);
+          const sets = mcqSetsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            const mcqSet = {
+              id: doc.id,
+              ...data,
+            } as MCQSet;
+            console.log('MCQ set fetched:', {
+              id: mcqSet.id,
+              title: mcqSet.title,
+              hasSlides: !!mcqSet.slides,
+              slidesCount: mcqSet.slides?.length || 0,
+              userId: mcqSet.userId
+            });
+            return mcqSet;
+          }) as MCQSet[];
+          // Sort manually as fallback
+          sets.sort((a, b) => {
+            const aTime = a.createdAt ? (a.createdAt as Timestamp).seconds : 0;
+            const bTime = b.createdAt ? (b.createdAt as Timestamp).seconds : 0;
+            return bTime - aTime;
+          });
+          setMcqSets(sets);
+          console.log('Fetched MCQ sets:', sets.length);
+          console.log('MCQ set IDs:', sets.map(s => s.id));
+        } catch (queryError: any) {
+          // If orderBy fails (likely missing index), try without it
+          console.warn('Query with orderBy failed, trying without orderBy:', queryError);
+          const mcqSetsQuery = fsQuery(
+            collection(db, 'mcqSets'),
+            where('userId', '==', currentUser.uid)
+          );
+          const mcqSetsSnapshot = await getDocs(mcqSetsQuery);
+          const sets = mcqSetsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            const mcqSet = {
+              id: doc.id,
+              ...data,
+            } as MCQSet;
+            console.log('MCQ set fetched (fallback query):', {
+              id: mcqSet.id,
+              title: mcqSet.title,
+              hasSlides: !!mcqSet.slides,
+              slidesCount: mcqSet.slides?.length || 0,
+              userId: mcqSet.userId
+            });
+            return mcqSet;
+          }) as MCQSet[];
+          // Sort manually by createdAt
+          sets.sort((a, b) => {
+            const aTime = a.createdAt ? (a.createdAt as Timestamp).seconds : 0;
+            const bTime = b.createdAt ? (b.createdAt as Timestamp).seconds : 0;
+            return bTime - aTime;
+          });
+          setMcqSets(sets);
+          console.log('Fetched MCQ sets (without orderBy):', sets.length);
+          console.log('MCQ set IDs:', sets.map(s => s.id));
+          
+          // Log the error message to help user create the index
+          if (queryError?.code === 'failed-precondition') {
+            console.error('Firestore index required. Please create a composite index for:');
+            console.error('Collection: mcqSets');
+            console.error('Fields: userId (Ascending), createdAt (Descending)');
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching MCQ sets:', error);
+      } finally {
+        setLoadingMcqSets(false);
+      }
+    };
+
+    fetchMcqSets();
+  }, [currentUser]);
+
+  const handleOpenAssignModal = (mcqSet: MCQSet) => {
+    setSelectedMcqSetForAssignment(mcqSet);
+    setAssignStudentIds([]);
+    setAssignDueDate('');
+    setAssignTimeLimit(undefined);
+    setAssignAttemptLimit(undefined);
+    setAssignShuffleQuestions(false);
+    setAssignShuffleOptions(false);
+    setShowAssignModal(true);
+  };
+
+  const handleCloseAssignModal = () => {
+    setShowAssignModal(false);
+    setSelectedMcqSetForAssignment(null);
+  };
+
+  const handleCreateAssignment = async () => {
+    if (!currentUser || !selectedMcqSetForAssignment) {
+      return;
+    }
+
+    if (assignStudentIds.length === 0) {
+      alert('Please select at least one student.');
+      return;
+    }
+
+    if (!assignDueDate) {
+      alert('Please select a due date.');
+      return;
+    }
+
+    // Verify all selected students are connected to this teacher
+    const connectedStudentIds = myStudents.map(conn => conn.studentId);
+    const invalidStudents = assignStudentIds.filter(id => !connectedStudentIds.includes(id));
+    if (invalidStudents.length > 0) {
+      alert('Some selected students are not connected to you.');
+      return;
+    }
+
+    try {
+      setAssigning(true);
+
+      const settings: AssignmentSettings = {
+        timeLimit: assignTimeLimit && assignTimeLimit > 0 ? assignTimeLimit : undefined,
+        attemptLimit: assignAttemptLimit && assignAttemptLimit > 0 ? assignAttemptLimit : undefined,
+        shuffleQuestions: assignShuffleQuestions,
+        shuffleOptions: assignShuffleOptions,
+      };
+
+      const dueDateObj = new Date(assignDueDate);
+
+      console.log('Creating assignment from TeacherHome:', {
+        mcqSetId: selectedMcqSetForAssignment.id,
+        mcqSetTitle: selectedMcqSetForAssignment.title,
+        mcqSetIdType: typeof selectedMcqSetForAssignment.id,
+        teacherId: currentUser.uid,
+        assignedStudentIds: assignStudentIds,
+        dueDate: dueDateObj
+      });
+      
+      if (!selectedMcqSetForAssignment.id || typeof selectedMcqSetForAssignment.id !== 'string') {
+        throw new Error(`Invalid MCQ set ID: "${selectedMcqSetForAssignment.id}". Cannot create assignment.`);
+      }
+
+      const assignmentId = await createAssignment({
+        mcqSetId: selectedMcqSetForAssignment.id,
+        teacherId: currentUser.uid,
+        assignedStudentIds: assignStudentIds,
+        assignedClassIds: [],
+        dueDate: dueDateObj,
+        settings,
+      });
+      
+      console.log('Assignment created successfully with ID:', assignmentId);
+
+      // Notify students
+      await notifyStudentsOfAssignment(assignStudentIds, assignmentId, selectedMcqSetForAssignment.title);
+
+      alert('Assignment created and assigned successfully!');
+      handleCloseAssignModal();
+      
+      // Refresh MCQ sets to show updated assignment info if needed
+    } catch (error: any) {
+      console.error('Error creating assignment:', error);
+      alert(`Failed to create assignment: ${error?.message || 'Unknown error'}. Please try again.`);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   async function handleStudentSearch(e?: React.FormEvent<HTMLFormElement>) {
     if (e) e.preventDefault();
     const q = searchQuery.trim().toLowerCase();
@@ -1030,8 +1240,24 @@ export function TeacherHome() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400 }}
+            style={{
+              padding: '14px',
+              background: 'linear-gradient(135deg, #FF6B6B 0%, #FF3B30 50%, #FF6B6B 100%)',
+              color: 'white',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '12px',
+              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+              cursor: 'pointer',
+              minWidth: '44px',
+              minHeight: '44px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
+              transition: 'all 0.3s ease'
+            }}
           >
-            Logout
+            🚪
           </motion.button>
         </div>
       </motion.header>
@@ -1074,7 +1300,105 @@ export function TeacherHome() {
           >
             Monitor your students' learning progress and access their reports.
           </motion.p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '0.75rem' }}>
+            <motion.button
+              onClick={() => { setNavigating(true); navigate('/learn'); }}
+              className="logout-button"
+              aria-label="Demo version"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400 }}
+            >
+              Demo Version
+            </motion.button>
+            <motion.button
+              onClick={() => { setNavigating(true); navigate('/practice'); }}
+              className="logout-button"
+              aria-label="Start practice"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400 }}
+              style={{ 
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
+              }}
+            >
+              Start Practice
+            </motion.button>
+            <motion.button
+              onClick={() => { setNavigating(true); navigate('/create-mcq'); }}
+              className="logout-button"
+              aria-label="Create MCQ Practice"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400 }}
+              style={{ 
+                background: 'linear-gradient(135deg, var(--primary-color) 0%, #4169E1 100%)',
+                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
+              }}
+            >
+              Create MCQ Practice
+            </motion.button>
+          </div>
         </motion.div>
+
+        {/* MCQ Sets Section */}
+        <motion.section
+          className="reports-history"
+          aria-labelledby="mcq-sets-heading"
+          variants={itemVariants}
+        >
+          <h3 id="mcq-sets-heading">📝 My MCQ Sets</h3>
+          {loadingMcqSets ? (
+            <div className="reports-empty">
+              <p>Loading MCQ sets...</p>
+            </div>
+          ) : mcqSets.length === 0 ? (
+            <div className="reports-empty">
+              <p>You haven't created any MCQ sets yet.</p>
+              <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
+                Click "Create MCQ Practice" above to create your first set.
+              </p>
+            </div>
+          ) : (
+            <div className="reports-grid">
+              {mcqSets.map((mcqSet) => (
+                <motion.div
+                  key={mcqSet.id}
+                  className="report-card"
+                  variants={cardVariants}
+                  initial="hidden"
+                  animate="visible"
+                  whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
+                >
+                  <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>📝</div>
+                  <h4>{mcqSet.title}</h4>
+                  <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-sm)' }}>
+                    {mcqSet.slides?.length || 0} question{mcqSet.slides?.length !== 1 ? 's' : ''}
+                  </p>
+                  {mcqSet.createdAt && (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)', marginBottom: 'var(--spacing-md)' }}>
+                      Created: {new Date((mcqSet.createdAt as Timestamp).seconds * 1000).toLocaleDateString()}
+                    </p>
+                  )}
+                  <motion.button
+                    onClick={() => handleOpenAssignModal(mcqSet)}
+                    className="logout-button"
+                    style={{ 
+                      marginTop: 'var(--spacing-md)', 
+                      width: '100%',
+                      background: 'linear-gradient(135deg, var(--primary-color) 0%, #4169E1 100%)'
+                    }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    📤 Assign to Students
+                  </motion.button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </motion.section>
 
         {/* Connection Requests Section */}
         <motion.section
@@ -2026,6 +2350,264 @@ export function TeacherHome() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Assign Assignment Modal */}
+        {showAssignModal && selectedMcqSetForAssignment && (
+          <motion.div
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={handleCloseAssignModal}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: 'var(--spacing-md)',
+            }}
+          >
+            <motion.div
+              className="modal-content"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(30px) saturate(180%)',
+                borderRadius: '24px',
+                padding: 'var(--spacing-xl)',
+                maxWidth: '600px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                boxShadow: 'var(--shadow-xl)',
+                border: '1px solid var(--glass-border)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+                <h2 style={{ margin: 0, color: 'var(--text-color)', fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier))' }}>
+                  Assign: {selectedMcqSetForAssignment.title}
+                </h2>
+                <button
+                  onClick={handleCloseAssignModal}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: 'var(--text-color)',
+                    padding: 'var(--spacing-xs)',
+                  }}
+                  aria-label="Close modal"
+                >
+                  ×
+                </button>
+              </div>
+
+              {myStudents.length === 0 ? (
+                <div style={{ padding: 'var(--spacing-lg)', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <p>You don't have any connected students yet.</p>
+                  <p style={{ marginTop: 'var(--spacing-sm)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
+                    Connect with students from the "Your Students" section first.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Student Selection */}
+                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                    <label style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontWeight: 600, color: 'var(--text-color)' }}>
+                      Select Students (Multi-select):
+                    </label>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 'var(--spacing-sm)',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      padding: 'var(--spacing-sm)',
+                      background: 'var(--surface)',
+                      borderRadius: '12px',
+                      border: '2px solid var(--glass-border)',
+                    }}>
+                      {myStudents.map((connection) => (
+                        <label key={connection.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--spacing-sm)',
+                          padding: 'var(--spacing-sm)',
+                          cursor: 'pointer',
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={assignStudentIds.includes(connection.studentId)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setAssignStudentIds([...assignStudentIds, connection.studentId]);
+                              } else {
+                                setAssignStudentIds(assignStudentIds.filter(id => id !== connection.studentId));
+                              }
+                            }}
+                            style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                          />
+                          <span style={{ color: 'var(--text-color)' }}>{connection.studentEmail}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Due Date */}
+                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                    <label htmlFor="modal-due-date" style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontWeight: 600, color: 'var(--text-color)' }}>
+                      Due Date (Required):
+                    </label>
+                    <input
+                      id="modal-due-date"
+                      type="datetime-local"
+                      value={assignDueDate}
+                      onChange={(e) => setAssignDueDate(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: 'var(--spacing-md)',
+                        border: '2px solid var(--glass-border)',
+                        borderRadius: '12px',
+                        fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))',
+                        background: 'var(--background)',
+                        color: 'var(--text-color)',
+                      }}
+                      min={new Date().toISOString().slice(0, 16)}
+                      required
+                    />
+                  </div>
+
+                  {/* Time Limit */}
+                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                    <label htmlFor="modal-time-limit" style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontWeight: 600, color: 'var(--text-color)' }}>
+                      Time Limit in Minutes (Optional, 0 = no limit):
+                    </label>
+                    <input
+                      id="modal-time-limit"
+                      type="number"
+                      value={assignTimeLimit ?? ''}
+                      onChange={(e) => setAssignTimeLimit(e.target.value ? parseInt(e.target.value) : undefined)}
+                      style={{
+                        width: '100%',
+                        padding: 'var(--spacing-md)',
+                        border: '2px solid var(--glass-border)',
+                        borderRadius: '12px',
+                        fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))',
+                        background: 'var(--background)',
+                        color: 'var(--text-color)',
+                      }}
+                      min="0"
+                      placeholder="No limit"
+                    />
+                  </div>
+
+                  {/* Attempt Limit */}
+                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                    <label htmlFor="modal-attempt-limit" style={{ display: 'block', marginBottom: 'var(--spacing-sm)', fontWeight: 600, color: 'var(--text-color)' }}>
+                      Attempt Limit (Optional, 0 = unlimited):
+                    </label>
+                    <input
+                      id="modal-attempt-limit"
+                      type="number"
+                      value={assignAttemptLimit ?? ''}
+                      onChange={(e) => setAssignAttemptLimit(e.target.value ? parseInt(e.target.value) : undefined)}
+                      style={{
+                        width: '100%',
+                        padding: 'var(--spacing-md)',
+                        border: '2px solid var(--glass-border)',
+                        borderRadius: '12px',
+                        fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))',
+                        background: 'var(--background)',
+                        color: 'var(--text-color)',
+                      }}
+                      min="0"
+                      placeholder="Unlimited"
+                    />
+                  </div>
+
+                  {/* Shuffle Options */}
+                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={assignShuffleQuestions}
+                        onChange={(e) => setAssignShuffleQuestions(e.target.checked)}
+                        style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                      />
+                      <span style={{ color: 'var(--text-color)' }}>Shuffle Questions</span>
+                    </label>
+                  </div>
+
+                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={assignShuffleOptions}
+                        onChange={(e) => setAssignShuffleOptions(e.target.checked)}
+                        style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                      />
+                      <span style={{ color: 'var(--text-color)' }}>Shuffle Answer Options</span>
+                    </label>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'flex-end', marginTop: 'var(--spacing-xl)' }}>
+                    <motion.button
+                      onClick={handleCloseAssignModal}
+                      style={{
+                        padding: '14px 28px',
+                        background: 'transparent',
+                        color: 'var(--text-color)',
+                        border: '2px solid var(--glass-border)',
+                        borderRadius: '12px',
+                        fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        minHeight: '44px',
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      Cancel
+                    </motion.button>
+                    <motion.button
+                      onClick={handleCreateAssignment}
+                      disabled={assignStudentIds.length === 0 || !assignDueDate || assigning}
+                      style={{
+                        padding: '14px 28px',
+                        background: assignStudentIds.length === 0 || !assignDueDate || assigning
+                          ? 'var(--glass-border)'
+                          : 'linear-gradient(135deg, var(--primary-color) 0%, #4169E1 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))',
+                        fontWeight: 600,
+                        cursor: assignStudentIds.length === 0 || !assignDueDate || assigning ? 'not-allowed' : 'pointer',
+                        minHeight: '44px',
+                        boxShadow: assignStudentIds.length === 0 || !assignDueDate || assigning
+                          ? 'none'
+                          : '0 8px 24px rgba(102, 126, 234, 0.4)',
+                      }}
+                      whileHover={assignStudentIds.length === 0 || !assignDueDate || assigning ? {} : { scale: 1.05 }}
+                      whileTap={assignStudentIds.length === 0 || !assignDueDate || assigning ? {} : { scale: 0.95 }}
+                    >
+                      {assigning ? 'Creating...' : '📤 Assign Assignment'}
+                    </motion.button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
         )}
 
         {/* Keyboard Shortcuts Modal */}
