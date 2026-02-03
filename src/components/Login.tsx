@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -29,30 +29,58 @@ export function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailValid, setEmailValid] = useState<boolean | null>(null);
+  
+  // "Did You Forget?" buffer - track failed attempts
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [showShake, setShowShake] = useState(false);
+  const [showForgotHelp, setShowForgotHelp] = useState(false);
+  
+  // Refs for focus management
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  
   const { login } = useAuth();
   const { setNavigating } = useNavigation();
   const navigate = useNavigate();
+  
+  // Load persistent user preference from localStorage
+  useEffect(() => {
+    const savedMode = localStorage.getItem('preferred_auth_mode');
+    if (savedMode === 'icons') {
+      setUseNormalPassword(false);
+    } else if (savedMode === 'text') {
+      setUseNormalPassword(true);
+    }
+  }, []);
+  
+  // Save preference when it changes
+  useEffect(() => {
+    localStorage.setItem('preferred_auth_mode', useNormalPassword ? 'text' : 'icons');
+  }, [useNormalPassword]);
 
   function handleGmailClick() {
-    if (emailPrefix) {
-      setEmail(`${emailPrefix}@gmail.com`);
-      setEmailValid(true);
-    } else {
-      setEmail('@gmail.com');
+    if (!emailPrefix) {
+      setError("Type your name first! ✏️");
+      emailInputRef.current?.focus();
+      return;
     }
+    setEmail(`${emailPrefix}@gmail.com`);
+    setEmailValid(true);
   }
 
   function handleEmailPrefixChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    setEmailPrefix(value);
-    if (value && email.includes('@gmail.com')) {
-      setEmail(`${value}@gmail.com`);
+    // Remove spaces and special characters that Firebase/Emails don't like
+    const sanitizedValue = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    setEmailPrefix(sanitizedValue);
+    if (sanitizedValue && email.includes('@gmail.com')) {
+      setEmail(`${sanitizedValue}@gmail.com`);
     }
-    if (value.length > 0) {
-      setEmailValid(value.length > 0);
+    if (sanitizedValue.length > 0) {
+      setEmailValid(sanitizedValue.length > 0);
     } else {
       setEmailValid(null);
     }
+    // Clear error when user starts typing
+    if (error) setError('');
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -96,9 +124,30 @@ export function Login() {
     } catch (err: unknown) {
       if (err instanceof FirebaseError) {
         if (err.code === 'auth/user-not-found') {
-          setError('Email not found. Please sign up first! 📧');
+          setError('Email not found. Maybe a typo in your name? Please check and try again! 📧');
         } else if (err.code === 'auth/wrong-password') {
-          setError(useNormalPassword ? 'Wrong password. Try again! 💪' : 'Wrong password icons. Try again! 💪');
+          const newFailedAttempts = failedAttempts + 1;
+          setFailedAttempts(newFailedAttempts);
+          
+          // Trigger shake animation
+          setShowShake(true);
+          setTimeout(() => setShowShake(false), 500);
+          
+          // Show gentle hints based on attempt count
+          if (newFailedAttempts === 1) {
+            setError(useNormalPassword 
+              ? 'Wrong password. Try again! 💪' 
+              : 'Wrong password icons. Try different icons! 💪');
+          } else if (newFailedAttempts === 2) {
+            setError(useNormalPassword
+              ? 'Still not right. Double-check your password! 💪'
+              : 'Still not right. Remember the order of your icons! 💪');
+          } else if (newFailedAttempts >= 3) {
+            setError(useNormalPassword
+              ? 'Having trouble? Ask a parent or teacher for help! 💪'
+              : 'Having trouble? Remember the 3 icons you picked when you signed up! 💪');
+            setShowForgotHelp(true);
+          }
         } else if (err.code === 'auth/invalid-email') {
           setError('Please enter a valid email! 📧');
         } else {
@@ -144,12 +193,31 @@ export function Login() {
 
         {error && (
           <div
-            className="error-message friendly-error"
+            className={`error-message friendly-error ${showShake ? 'shake' : ''}`}
             role="alert"
             aria-live="assertive"
           >
             <span className="error-icon">❌</span>
             {error}
+          </div>
+        )}
+        
+        {showForgotHelp && (
+          <div className="forgot-help-card">
+            <p className="forgot-help-title">Need a reminder? 🤔</p>
+            <p className="forgot-help-text">
+              Ask a parent or teacher to help you reset your password. They can help you remember your icons!
+            </p>
+            <button
+              type="button"
+              className="forgot-help-button"
+              onClick={() => {
+                setShowForgotHelp(false);
+                setFailedAttempts(0);
+              }}
+            >
+              Got it! 👍
+            </button>
           </div>
         )}
 
@@ -161,6 +229,7 @@ export function Login() {
             </label>
             <div className="email-input-group">
               <input
+                ref={emailInputRef}
                 type="text"
                 id="email-prefix"
                 name="email-prefix"
@@ -180,10 +249,22 @@ export function Login() {
                 @gmail.com
               </button>
             </div>
-            {email && (
-              <div className="email-preview">
-                <span className="email-preview-label">Your email:</span>
-                <span className="email-preview-value">{email}</span>
+            {emailPrefix && (
+              <div className="email-id-card">
+                <div className="id-card-header">
+                  <span className="id-card-icon">🆔</span>
+                  <span className="id-card-title">Your Login ID</span>
+                </div>
+                <div className="id-card-content">
+                  <div className="id-card-field">
+                    <span className="id-card-label">Name:</span>
+                    <span className="id-card-value">{emailPrefix}</span>
+                  </div>
+                  <div className="id-card-field">
+                    <span className="id-card-label">Email:</span>
+                    <span className="id-card-value">{email}</span>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -226,7 +307,10 @@ export function Login() {
                 <IconPasswordSelector
                   selectedIcons={passwordIcons}
                   onIconSelect={(icon) => {
-                    if (passwordIcons.length < 3) {
+                    // Smart selection: allow deselecting by clicking again
+                    if (passwordIcons.includes(icon)) {
+                      setPasswordIcons(passwordIcons.filter(i => i !== icon));
+                    } else if (passwordIcons.length < 3) {
                       setPasswordIcons([...passwordIcons, icon]);
                     }
                   }}
@@ -237,7 +321,14 @@ export function Login() {
                   <button
                     type="button"
                     className="clear-icons-button"
-                    onClick={() => setPasswordIcons([])}
+                    onClick={() => {
+                      setPasswordIcons([]);
+                      // Focus management: move focus to first icon button after clearing
+                      setTimeout(() => {
+                        const firstButton = document.querySelector('.icon-button:not(.disabled)') as HTMLButtonElement;
+                        firstButton?.focus();
+                      }, 100);
+                    }}
                   >
                     Clear and Start Over 🔄
                   </button>
@@ -282,8 +373,8 @@ export function Login() {
             {loading ? (
               <>
                 <span>Loading...</span>
-                <span style={{ display: 'inline-block', marginLeft: '8px' }}>
-                  ⏳
+                <span className="loading-mascot" style={{ display: 'inline-block', marginLeft: '8px' }}>
+                  🏃
                 </span>
               </>
             ) : (

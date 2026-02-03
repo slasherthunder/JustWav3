@@ -36,29 +36,70 @@ export function Signup() {
   const [loading, setLoading] = useState(false);
   const [emailValid, setEmailValid] = useState<boolean | null>(null);
   const [passwordUnique, setPasswordUnique] = useState<boolean | null>(null);
+  
+  // Progressive disclosure: track current step
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  
+  // Animation states
+  const [roleJustSelected, setRoleJustSelected] = useState(false);
+  const [emailJustValidated, setEmailJustValidated] = useState(false);
+  const [passwordJustMatched, setPasswordJustMatched] = useState(false);
+  
   const { signup, login } = useAuth();
   const { setNavigating } = useNavigation();
   const navigate = useNavigate();
+  
+  // Audio cue function
+  const playSelectionSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (err) {
+      // Silently fail if audio context is not available
+    }
+  };
 
   function handleGmailClick() {
     if (emailPrefix) {
       setEmail(`${emailPrefix}@gmail.com`);
       setEmailValid(true);
+      setEmailJustValidated(true);
+      setTimeout(() => {
+        setEmailJustValidated(false);
+        setCurrentStep(3);
+      }, 300);
+      playSelectionSound();
     } else {
       setEmail('@gmail.com');
     }
   }
 
   function handleEmailPrefixChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    setEmailPrefix(value);
-    if (value && email.includes('@gmail.com')) {
-      setEmail(`${value}@gmail.com`);
-    }
-    if (value.length > 0) {
-      setEmailValid(value.length > 0);
+    // Remove spaces and special characters that Firebase/Emails don't like
+    const sanitizedValue = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    setEmailPrefix(sanitizedValue);
+    
+    if (sanitizedValue) {
+      setEmail(`${sanitizedValue}@gmail.com`);
+      setEmailValid(true);
+      setEmailJustValidated(true);
+      setTimeout(() => setEmailJustValidated(false), 300);
     } else {
-      setEmailValid(null);
+      setEmailValid(false);
+      setEmailJustValidated(false);
     }
     // Reset password uniqueness when email changes
     setPasswordUnique(null);
@@ -202,50 +243,30 @@ export function Signup() {
         )}
 
         <form id="signup-form" onSubmit={handleSubmit} aria-label="Sign up form">
-          <div className="form-group child-friendly-group">
-            <label htmlFor="email-prefix" className="label-with-icon">
-              <span className="label-icon">📧</span>
-              <span>Your Email</span>
-            </label>
-            <div className="email-input-group">
-              <input
-                type="text"
-                id="email-prefix"
-                name="email-prefix"
-                value={emailPrefix}
-                onChange={handleEmailPrefixChange}
-                required
-                placeholder="Type your name here"
-                className={emailValid === true ? 'input-valid' : emailValid === false ? 'input-invalid' : ''}
-                style={{ flex: 1 }}
-              />
-              <button
-                type="button"
-                className="gmail-button"
-                onClick={handleGmailClick}
-                aria-label="Add @gmail.com to email"
-              >
-                @gmail.com
-              </button>
-            </div>
-            {email && (
-              <div className="email-preview">
-                <span className="email-preview-label">Your email:</span>
-                <span className="email-preview-value">{email}</span>
+          {/* Step 1: Role Selection */}
+          {currentStep >= 1 && (
+            <div className="form-group child-friendly-group">
+              <div className="step-indicator">
+                <span className="step-number">1</span>
+                <span className="step-label">Who are you?</span>
               </div>
-            )}
-          </div>
-
-          <div className="form-group child-friendly-group">
-            <label className="label-with-icon">
-              <span className="label-icon">👨‍👩‍👧‍👦</span>
-              <span>Who are you?</span>
-            </label>
-            <div className="role-selection">
-              <button
+              <label className="label-with-icon">
+                <span className="label-icon">👨‍👩‍👧‍👦</span>
+                <span>Who are you?</span>
+              </label>
+              <div className="role-selection">
+                <button
                 type="button"
-                className={`role-button ${userRole === 'parent' ? 'selected' : ''}`}
-                onClick={() => setUserRole('parent')}
+                className={`role-button ${userRole === 'parent' ? 'selected' : ''} ${roleJustSelected && userRole === 'parent' ? 'celebrate' : ''}`}
+                onClick={() => {
+                  setUserRole('parent');
+                  setRoleJustSelected(true);
+                  playSelectionSound();
+                  setTimeout(() => {
+                    setRoleJustSelected(false);
+                    setCurrentStep(2);
+                  }, 300);
+                }}
                 aria-label="I am a parent"
               >
                 <span className="role-icon">👨‍👩‍👧‍👦</span>
@@ -253,8 +274,16 @@ export function Signup() {
               </button>
               <button
                 type="button"
-                className={`role-button ${userRole === 'student' ? 'selected' : ''}`}
-                onClick={() => setUserRole('student')}
+                className={`role-button ${userRole === 'student' ? 'selected' : ''} ${roleJustSelected && userRole === 'student' ? 'celebrate' : ''}`}
+                onClick={() => {
+                  setUserRole('student');
+                  setRoleJustSelected(true);
+                  playSelectionSound();
+                  setTimeout(() => {
+                    setRoleJustSelected(false);
+                    setCurrentStep(2);
+                  }, 300);
+                }}
                 aria-label="I am a student"
               >
                 <span className="role-icon">🎓</span>
@@ -262,17 +291,76 @@ export function Signup() {
               </button>
               <button
                 type="button"
-                className={`role-button ${userRole === 'teacher' ? 'selected' : ''}`}
-                onClick={() => setUserRole('teacher')}
+                className={`role-button ${userRole === 'teacher' ? 'selected' : ''} ${roleJustSelected && userRole === 'teacher' ? 'celebrate' : ''}`}
+                onClick={() => {
+                  setUserRole('teacher');
+                  setRoleJustSelected(true);
+                  playSelectionSound();
+                  setTimeout(() => {
+                    setRoleJustSelected(false);
+                    setCurrentStep(2);
+                  }, 300);
+                }}
                 aria-label="I am a teacher"
               >
                 <span className="role-icon">👩‍🏫</span>
                 <span className="role-text">Teacher</span>
               </button>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div>
+          {/* Step 2: Email Setup */}
+          {currentStep >= 2 && (
+            <div className="form-group child-friendly-group">
+              <div className="step-indicator">
+                <span className="step-number">2</span>
+                <span className="step-label">Email setup</span>
+              </div>
+              <label htmlFor="email-prefix" className="label-with-icon">
+                <span className="label-icon">📧</span>
+                <span>Your Email</span>
+              </label>
+              <div className="email-input-group">
+                <input
+                  type="text"
+                  id="email-prefix"
+                  name="email-prefix"
+                  value={emailPrefix}
+                  onChange={handleEmailPrefixChange}
+                  required
+                  placeholder="Type your name here"
+                  className={emailValid === true ? 'input-valid' : emailValid === false ? 'input-invalid' : ''}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="gmail-button"
+                  onClick={handleGmailClick}
+                  aria-label="Add @gmail.com to email"
+                >
+                  @gmail.com
+                </button>
+              </div>
+              <div className={`email-status-card ${emailValid ? 'is-valid' : ''} ${emailJustValidated ? 'celebrate' : ''}`}>
+                {emailPrefix ? (
+                  <p>Your login name will be: <strong>{emailPrefix}</strong></p>
+                ) : (
+                  <p>Type your name to start! ✨</p>
+                )}
+              </div>
+              {email && emailValid && (
+                <div className="email-preview">
+                  <span className="email-preview-label">Your email:</span>
+                  <span className="email-preview-value">{email}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Password Creation */}
+          {currentStep >= 3 && (
+            <div>
             <div className="form-group child-friendly-group">
               <label className="label-with-icon" style={{ justifyContent: 'center' }}>
                 <span>Please choose only one type of password:</span>
@@ -369,9 +457,12 @@ export function Signup() {
                 </div>
               </div>
             )}
-          </div>
+            </div>
+          )}
 
-          <div>
+          {/* Step 3: Password Creation */}
+          {currentStep >= 3 && (
+            <div>
             {!useNormalPassword ? (
               <>
                 <IconPasswordSelector
@@ -396,13 +487,44 @@ export function Signup() {
                   </button>
                 )}
                 {passwordIcons.length === 3 && confirmPasswordIcons.length === 3 && (
-                  <div className="password-match-check">
+                  <>
                     {passwordIcons.join('-') === confirmPasswordIcons.join('-') ? (
-                      <span className="match-success">✅ Passwords match! Great job!</span>
+                      <>
+                        {!passwordJustMatched && (() => {
+                          setPasswordJustMatched(true);
+                          playSelectionSound();
+                          setTimeout(() => setPasswordJustMatched(false), 300);
+                          return null;
+                        })()}
+                        <div className={`password-match-check ${passwordJustMatched ? 'celebrate' : ''}`}>
+                          <span className="match-success">✅ Passwords match! Great job!</span>
+                        </div>
+                        {/* Visual Password Comparison */}
+                        <div className="password-visual-comparison">
+                          <div className="password-visual-section">
+                            <p className="password-visual-label">Your Password:</p>
+                            <div className="password-icons-display">
+                              {passwordIcons.map((icon, idx) => (
+                                <span key={idx} className="password-icon-large">{icon}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="password-visual-section">
+                            <p className="password-visual-label">Confirm Password:</p>
+                            <div className="password-icons-display">
+                              {confirmPasswordIcons.map((icon, idx) => (
+                                <span key={idx} className={`password-icon-large ${passwordIcons[idx] === icon ? 'match' : 'no-match'}`}>{icon}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>
                     ) : (
-                      <span className="match-error">❌ Icons don't match. Try again!</span>
+                      <div className="password-match-check">
+                        <span className="match-error">❌ Icons don't match. Try again!</span>
+                      </div>
                     )}
-                  </div>
+                  </>
                 )}
               </>
             ) : (
@@ -443,6 +565,7 @@ export function Signup() {
               </>
             )}
           </div>
+          )}
 
           <button
             type="submit"

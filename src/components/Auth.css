@@ -402,6 +402,30 @@
   transform: translateY(0);
 }
 
+.email-status-card {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: rgba(102, 126, 234, 0.05);
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  text-align: center;
+  font-size: calc(1rem * var(--text-size-multiplier));
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+}
+
+.email-status-card.is-valid {
+  background: rgba(46, 125, 50, 0.1);
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.email-status-card.is-valid strong {
+  color: var(--success-color);
+  font-size: calc(1.125rem * var(--text-size-multiplier));
+  font-weight: 700;
+}
+
 .email-preview {
   margin-top: 0.75rem;
   padding: 0.75rem;
@@ -533,6 +557,26 @@
   box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
 }
 
+/* Celebration Animation */
+@keyframes celebrate {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1) rotate(2deg); }
+  100% { transform: scale(1); }
+}
+
+.role-button.selected.celebrate {
+  animation: celebrate 0.3s ease-out;
+  border: 4px solid #4CAF50;
+}
+
+.email-status-card.celebrate {
+  animation: celebrate 0.3s ease-out;
+}
+
+.password-match-check.celebrate {
+  animation: celebrate 0.3s ease-out;
+}
+
 .role-button:focus-visible {
   outline: 4px solid var(--primary-color);
   outline-offset: 2px;
@@ -564,6 +608,97 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
+/* Step Indicator */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+}
+
+.step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: calc(1rem * var(--text-size-multiplier));
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.step-label {
+  font-size: calc(1rem * var(--text-size-multiplier));
+  font-weight: 600;
+  color: var(--text-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Visual Password Comparison */
+.password-visual-comparison {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(102, 126, 234, 0.05);
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.password-visual-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.password-visual-label {
+  font-size: calc(0.875rem * var(--text-size-multiplier));
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.password-icons-display {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.password-icon-large {
+  font-size: 3rem;
+  padding: 0.5rem;
+  background: white;
+  border: 3px solid var(--border-color);
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  min-height: 64px;
+  transition: all 0.3s ease;
+}
+
+.password-icon-large.match {
+  border-color: var(--success-color);
+  background: rgba(46, 125, 50, 0.1);
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
+}
+
+.password-icon-large.no-match {
+  border-color: var(--error-color);
+  background: rgba(211, 47, 47, 0.1);
+  box-shadow: 0 2px 8px rgba(211, 47, 47, 0.3);
+}
+
 @media (max-width: 768px) {
   .role-selection {
     grid-template-columns: 1fr;
@@ -576,9 +711,145 @@
   .role-icon {
     font-size: 2.5rem;
   }
+  
+  .password-visual-comparison {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .password-icon-large {
+    font-size: 2.5rem;
+    min-width: 56px;
+    min-height: 56px;
+  }
 }
 
 /* Responsive */
+/* Shake Animation for Errors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+  20%, 40%, 60%, 80% { transform: translateX(10px); }
+}
+
+.error-message.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* ID Card Style for Email */
+.email-id-card {
+  margin-top: 1rem;
+  padding: 1.25rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+  color: white;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.id-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.id-card-icon {
+  font-size: 1.5rem;
+}
+
+.id-card-title {
+  font-size: calc(1rem * var(--text-size-multiplier));
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.id-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.id-card-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.id-card-label {
+  font-size: calc(0.875rem * var(--text-size-multiplier));
+  font-weight: 600;
+  opacity: 0.9;
+  min-width: 60px;
+}
+
+.id-card-value {
+  font-size: calc(1.125rem * var(--text-size-multiplier));
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  flex: 1;
+  text-align: center;
+}
+
+/* Forgot Help Card */
+.forgot-help-card {
+  margin-top: 1rem;
+  padding: 1.25rem;
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+  border: 3px solid #fdcb6e;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.forgot-help-title {
+  font-size: calc(1.125rem * var(--text-size-multiplier));
+  font-weight: 700;
+  color: #856404;
+  margin: 0 0 0.75rem 0;
+}
+
+.forgot-help-text {
+  font-size: calc(1rem * var(--text-size-multiplier));
+  color: #856404;
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.forgot-help-button {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: calc(1rem * var(--text-size-multiplier));
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.forgot-help-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* Loading Mascot Animation */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-5px) rotate(-5deg); }
+  75% { transform: translateY(-5px) rotate(5deg); }
+}
+
+.loading-mascot {
+  animation: bounce 0.6s ease-in-out infinite;
+  display: inline-block;
+}
+
 @media (max-width: 768px) {
   .auth-card.child-friendly-card {
     padding: 2rem 1.5rem;
@@ -597,6 +868,20 @@
   }
 
   .gmail-button {
+    width: 100%;
+  }
+  
+  .email-id-card {
+    padding: 1rem;
+  }
+  
+  .id-card-field {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .id-card-value {
     width: 100%;
   }
 }

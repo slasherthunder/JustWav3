@@ -1,0 +1,245 @@
+.help-guide-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.help-guide-container {
+  background: white;
+  border-radius: 24px;
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.help-guide-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+}
+
+.help-guide-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text-color);
+}
+
+.header-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.audio-toggle {
+  background: transparent;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.audio-toggle.enabled {
+  border-color: #64B5F6;
+  background: rgba(100, 181, 246, 0.1);
+}
+
+.audio-toggle:hover {
+  transform: scale(1.1);
+}
+
+.close-button {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-color);
+}
+
+.help-guide-content {
+  padding: 2rem;
+  flex: 1;
+}
+
+.help-intro {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin: 0 0 2rem 0;
+  padding: 1rem;
+  background: rgba(100, 181, 246, 0.1);
+  border-radius: 12px;
+}
+
+.help-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.help-item {
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  border: 2px solid #64B5F6;
+  border-radius: 16px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.help-item:hover {
+  border-color: #4A90E2;
+  box-shadow: 0 8px 24px rgba(74, 144, 226, 0.2);
+  transform: translateY(-2px);
+}
+
+.help-item.selected {
+  background: linear-gradient(135deg, #BBDEFB 0%, #90CAF9 100%);
+  border-color: #4A90E2;
+  box-shadow: 0 8px 24px rgba(74, 144, 226, 0.3);
+}
+
+.help-item-icon {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.help-item-content {
+  width: 100%;
+}
+
+.help-item-gesture {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-color);
+  margin: 0 0 0.5rem 0;
+}
+
+.help-item-meaning {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #4A90E2;
+  margin: 0;
+}
+
+.help-item-description {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(74, 144, 226, 0.2);
+  width: 100%;
+}
+
+.help-item-description p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem 0;
+  line-height: 1.5;
+}
+
+.demo-button {
+  padding: 0.5rem 1rem;
+  background: #64B5F6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.demo-button:hover {
+  background: #4A90E2;
+  transform: scale(1.05);
+}
+
+.help-tips {
+  background: rgba(255, 193, 77, 0.1);
+  border: 2px solid #FFB74D;
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.help-tips h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-color);
+  margin: 0 0 1rem 0;
+}
+
+.help-tips ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: var(--text-secondary);
+}
+
+.help-tips li {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .help-guide-overlay {
+    padding: 1rem;
+  }
+
+  .help-guide-container {
+    max-height: 95vh;
+  }
+
+  .help-guide-header {
+    padding: 1rem 1.5rem;
+  }
+
+  .help-guide-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .help-guide-content {
+    padding: 1.5rem;
+  }
+
+  .help-items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .help-item {
+    padding: 1.25rem;
+  }
+}

@@ -1,0 +1,293 @@
+/* Buddy Button Container */
+.buddy-button-container {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+/* Main Buddy Button */
+.buddy-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(74, 144, 226, 0.4);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-width: 100px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.buddy-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.buddy-button:hover::before {
+  left: 100%;
+}
+
+.buddy-button:hover {
+  box-shadow: 0 12px 32px rgba(74, 144, 226, 0.6);
+  transform: translateY(-2px);
+}
+
+.buddy-button.active {
+  background: linear-gradient(135deg, #FFB74D 0%, #FF9800 100%);
+  box-shadow: 0 8px 24px rgba(255, 183, 77, 0.4);
+}
+
+.buddy-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.buddy-label {
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+/* Dropdown Menu */
+.buddy-dropdown {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  padding: 0.5rem;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.buddy-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-color);
+  transition: all 0.2s ease;
+  position: relative;
+  text-align: left;
+}
+
+.buddy-menu-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.buddy-menu-item.active {
+  background: rgba(74, 144, 226, 0.1);
+  color: #4A90E2;
+  font-weight: 600;
+}
+
+.buddy-menu-item.try-me:hover {
+  background: rgba(255, 183, 77, 0.1);
+  color: #FFB74D;
+}
+
+.buddy-menu-item.practice:hover {
+  background: rgba(129, 199, 132, 0.1);
+  color: #81C784;
+}
+
+.buddy-menu-item.help:hover {
+  background: rgba(100, 181, 246, 0.1);
+  color: #64B5F6;
+}
+
+.menu-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.menu-text {
+  flex: 1;
+}
+
+.active-indicator {
+  color: #4A90E2;
+  font-size: 0.75rem;
+}
+
+/* Try Me Mode Indicator */
+.try-me-indicator {
+  position: fixed;
+  top: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  background: linear-gradient(135deg, #FFB74D 0%, #FF9800 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(255, 183, 77, 0.4);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(255, 183, 77, 0.4);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(255, 183, 77, 0.6);
+  }
+}
+
+.indicator-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.indicator-icon {
+  font-size: 1.5rem;
+}
+
+.indicator-text {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.indicator-close {
+  margin-left: 1rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.indicator-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+/* Try Me Mode - Highlight Interactive Elements */
+body.try-me-active .explainable {
+  position: relative;
+  outline: 3px solid rgba(255, 183, 77, 0.6) !important;
+  outline-offset: 4px;
+  animation: glow 2s infinite;
+}
+
+@keyframes glow {
+  0%, 100% {
+    outline-color: rgba(255, 183, 77, 0.6);
+    box-shadow: 0 0 10px rgba(255, 183, 77, 0.3);
+  }
+  50% {
+    outline-color: rgba(255, 183, 77, 0.9);
+    box-shadow: 0 0 20px rgba(255, 183, 77, 0.5);
+  }
+}
+
+body.try-me-active .explainable:hover {
+  outline-color: rgba(255, 183, 77, 1) !important;
+  box-shadow: 0 0 30px rgba(255, 183, 77, 0.7) !important;
+  transform: scale(1.02);
+  transition: all 0.2s ease;
+}
+
+/* Tooltip for Try Me Mode */
+.try-me-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  z-index: 10000;
+  pointer-events: none;
+  max-width: 250px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.try-me-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .buddy-button-container {
+    bottom: 1rem;
+    right: 1rem;
+  }
+
+  .buddy-button {
+    padding: 0.875rem 1rem;
+    min-width: 80px;
+  }
+
+  .buddy-icon {
+    font-size: 1.75rem;
+  }
+
+  .buddy-label {
+    font-size: 0.75rem;
+  }
+
+  .buddy-dropdown {
+    min-width: 180px;
+  }
+
+  .try-me-indicator {
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    transform: none;
+    padding: 0.875rem 1.25rem;
+  }
+
+  .indicator-content {
+    flex-wrap: wrap;
+  }
+}

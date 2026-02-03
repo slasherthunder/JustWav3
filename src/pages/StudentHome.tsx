@@ -10,6 +10,7 @@ import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
 import { getAssignmentsByStudent } from '../utils/assignments';
 import type { Assignment } from '../types/assignments';
 import './Home.css';
+import logoImage from '../assets/images/logo.png';
 
 interface LearningReport {
   id: string;
@@ -359,7 +360,13 @@ export function StudentHome() {
           setAssignments(studentAssignments);
         } catch (queryError: any) {
           // If orderBy fails (likely missing index), try without it
+          if (queryError?.code === 'failed-precondition') {
+            // Silently handle missing index - we'll use fallback query
+            console.log('[StudentHome] Firestore index not found, using fallback query (this is expected until index is created)');
+          } else {
           console.warn('Query with orderBy failed, trying without orderBy:', queryError);
+          }
+          
           const assignmentsQuery = fsQuery(
             collection(db, 'assignments'),
             where('assignedStudentIds', 'array-contains', currentUser.uid)
@@ -375,14 +382,8 @@ export function StudentHome() {
             const bTime = b.createdAt ? (b.createdAt as Timestamp).seconds : 0;
             return bTime - aTime;
           });
-          console.log('Fetched assignments (without orderBy):', assignments.length, assignments);
+          console.log('Fetched assignments (sorted manually):', assignments.length, assignments);
           setAssignments(assignments);
-          
-          if (queryError?.code === 'failed-precondition') {
-            console.error('Firestore index required. Please create a composite index for:');
-            console.error('Collection: assignments');
-            console.error('Fields: assignedStudentIds (Array), createdAt (Descending)');
-          }
         }
       } catch (error: any) {
         console.error('Error fetching assignments:', error);
@@ -678,7 +679,7 @@ export function StudentHome() {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
         >
-          JustWav3 🎓
+          <img src={logoImage} alt="JustWav3" style={{ maxHeight: '50px', width: 'auto', verticalAlign: 'middle' }} /> 🎓
         </motion.h1>
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
           <motion.button
@@ -808,43 +809,68 @@ export function StudentHome() {
             <motion.button
               onClick={() => { setNavigating(true); navigate('/learn'); }}
               className="logout-button"
-              aria-label="Demo version"
+              aria-label="Our Tutorial"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 400 }}
             >
-              Demo Version
-            </motion.button>
-            <motion.button
-              onClick={() => {
-                if (assignments.length === 0) {
-                  alert('You don\'t have any assignments yet. Your teachers will assign MCQ practice sets to you.');
-                  return;
-                }
-                setShowAssignmentModal(true);
-              }}
-              className="logout-button"
-              aria-label="Start practice"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
-              style={{ 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
-              }}
-            >
-              Start Practice
+              Our Tutorial
             </motion.button>
           </div>
         </motion.div>
 
-        {/* Assignments Section */}
+        {/* Hub-based Layout */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(2, 1fr)', 
+          gap: '2.5rem', 
+          marginTop: '2.5rem',
+          maxWidth: '1400px',
+          margin: '2.5rem auto 0',
+          padding: '0 var(--spacing-lg)'
+        }}>
+          
+          {/* My Work Hub */}
         <motion.section
           className="reports-history"
-          aria-labelledby="assignments-heading"
+            aria-labelledby="work-hub-heading"
           variants={itemVariants}
-        >
-          <h3 id="assignments-heading">📋 My Assignments</h3>
+            style={{ 
+              border: '2px solid rgba(102, 126, 234, 0.2)', 
+              borderRadius: '20px', 
+              padding: '2rem',
+              background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%)',
+              boxShadow: '0 8px 32px rgba(102, 126, 234, 0.1)',
+              minHeight: '500px',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 'var(--spacing-md)', 
+              marginBottom: '2rem',
+              paddingBottom: '1.5rem',
+              borderBottom: '2px solid rgba(102, 126, 234, 0.15)'
+            }}>
+              <span style={{ fontSize: '3rem' }}>📚</span>
+              <h2 id="work-hub-heading" style={{ 
+                margin: 0, 
+                fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier) * 1.2)',
+                fontWeight: 700,
+                color: 'var(--primary-color)'
+              }}>My Work</h2>
+            </div>
+
+            {/* Assignments Section */}
+            <div style={{ marginBottom: '2.5rem' }}>
+              <h3 id="assignments-heading" style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>📋 Assignments</h3>
           {loadingAssignments ? (
             <div className="reports-empty">
               <p>Loading assignments...</p>
@@ -922,15 +948,173 @@ export function StudentHome() {
               })}
             </div>
           )}
+            </div>
+
+            {/* Practice Section */}
+            <div style={{ marginBottom: '2.5rem' }}>
+              <h3 style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>🎯 Practice</h3>
+              <motion.button
+                onClick={() => {
+                  if (assignments.length === 0) {
+                    alert('You don\'t have any assignments yet. Your teachers will assign MCQ practice sets to you.');
+                    return;
+                  }
+                  setShowAssignmentModal(true);
+                }}
+                className="logout-button"
+                aria-label="Start practice"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400 }}
+                    style={{ 
+                      width: '100%',
+                      padding: '1rem 1.5rem',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)',
+                      fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))'
+                    }}
+              >
+                Start Practice
+              </motion.button>
+            </div>
+
+            {/* Learning Reports Section */}
+            <div style={{ flex: 1 }}>
+              <h3 id="reports-heading" style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>📊 Learning Reports</h3>
+              
+              {loadingReports ? (
+                <div className="reports-loading">
+                  <p>Loading your reports...</p>
+                </div>
+              ) : reports.length === 0 ? (
+                <div className="reports-empty">
+                  <p>No learning reports yet. Start your first learning session to see your progress!</p>
+                  <motion.button
+                    onClick={() => { setNavigating(true); navigate('/learn'); }}
+                    className="logout-button"
+                    aria-label="Our Tutorial"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: 'spring', stiffness: 400 }}
+                    style={{ marginTop: '1rem' }}
+                  >
+                    Our Tutorial
+                  </motion.button>
+                </div>
+              ) : (
+                <div className="reports-grid">
+                  {reports.map((report, index) => (
+                    <motion.div
+                      key={report.id}
+                      className="report-card"
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      transition={{ delay: index * 0.1 }}
+                      whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
+                    >
+                      <div className="report-header">
+                        <h4>Session Report</h4>
+                        <span className="report-date">
+                          {new Date(report.sessionDate).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      
+                      <div className="report-metrics">
+                        <div className="metric-item">
+                          <span className="metric-label">Success Rate</span>
+                          <span className="metric-value success">{Math.round(report.successRate)}%</span>
+                        </div>
+                        <div className="metric-item">
+                          <span className="metric-label">Attempts</span>
+                          <span className="metric-value">{report.totalAttempts}</span>
+                        </div>
+                        <div className="metric-item">
+                          <span className="metric-label">Successes</span>
+                          <span className="metric-value">{report.totalSuccesses}</span>
+                        </div>
+                        <div className="metric-item">
+                          <span className="metric-label">Help Requests</span>
+                          <span className="metric-value">{report.totalHelpRequests}</span>
+                        </div>
+                      </div>
+
+                      <div className="report-profile">
+                        <div className="profile-item">
+                          <strong>Best Modes:</strong> {report.profile.bestModes}
+                        </div>
+                        <div className="profile-item">
+                          <strong>Strengths:</strong> {report.profile.strengths}
+                        </div>
+                        <div className="profile-item">
+                          <strong>Recommendation:</strong> {report.profile.recommended}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
         </motion.section>
 
+          {/* My People Hub */}
         <motion.section
-          className="accessibility-controls"
-          aria-labelledby="find-teachers-heading"
+            className="reports-history"
+            aria-labelledby="people-hub-heading"
           variants={itemVariants}
-        >
-          <h3 id="find-teachers-heading">Find Your Teachers 👩‍🏫</h3>
-          <form onSubmit={handleTeacherSearch} style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'stretch', flexWrap: 'wrap' }}>
+            style={{ 
+              border: '2px solid rgba(34, 197, 94, 0.2)', 
+              borderRadius: '20px', 
+              padding: '2rem',
+              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)',
+              boxShadow: '0 8px 32px rgba(34, 197, 94, 0.1)',
+              minHeight: '500px',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 'var(--spacing-md)', 
+              marginBottom: '2rem',
+              paddingBottom: '1.5rem',
+              borderBottom: '2px solid rgba(34, 197, 94, 0.15)'
+            }}>
+              <span style={{ fontSize: '3rem' }}>👥</span>
+              <h2 id="people-hub-heading" style={{ 
+                margin: 0, 
+                fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier) * 1.2)',
+                fontWeight: 700,
+                color: 'var(--success-color)'
+              }}>My People</h2>
+            </div>
+
+            {/* Find Your Teachers Section */}
+            <div style={{ marginBottom: '2.5rem' }}>
+              <h3 id="find-teachers-heading" style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>👩‍🏫 Teachers</h3>
+              <form onSubmit={handleTeacherSearch} style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'stretch', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
             <input
               type="text"
               value={teacherSearchQuery}
@@ -954,7 +1138,7 @@ export function StudentHome() {
             <p className="error-text" style={{ marginTop: 'var(--spacing-sm)' }}>{teacherSearchError}</p>
           )}
           {teachers.length > 0 && (
-            <div className="feature-grid" style={{ marginTop: 'var(--spacing-md)' }}>
+                <div className="feature-grid" style={{ marginTop: '1.25rem', gap: '1rem' }}>
               {teachers.map((teacher) => {
                 const isPending = pendingRequests.some(req => req.requestedId === teacher.uid);
                 const isConnected = myTeachers.some(conn => conn.teacherId === teacher.uid);
@@ -992,18 +1176,109 @@ export function StudentHome() {
             </div>
           )}
           {teachers.length === 0 && teacherSearchQuery.trim() && !teacherSearchLoading && !teacherSearchError && (
-            <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)' }}>No teachers found</p>
-          )}
-        </motion.section>
+                <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>No teachers found</p>
+              )}
+            </div>
 
-        {/* Connection Requests Section */}
-        <motion.section
-          className="reports-history"
-          aria-labelledby="requests-heading"
-          variants={itemVariants}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-            <h3 id="requests-heading" style={{ margin: 0 }}>📬 Connection Requests</h3>
+            {/* Connected Teachers Section */}
+            <div style={{ marginBottom: '2.5rem' }}>
+              <h3 id="connected-teachers-heading" style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>👩‍🏫 My Teachers</h3>
+              {myTeachers.length === 0 ? (
+                <div className="reports-empty">
+                  <p>You did not connect with any of your teachers yet.</p>
+                  <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
+                    Search for teachers above and send them connection requests, or wait for your teachers to request you.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <h4 style={{ 
+                    fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', 
+                    marginBottom: 'var(--spacing-sm)', 
+                    color: 'var(--text-secondary)',
+                    fontWeight: 500
+                  }}>My Teachers ({myTeachers.length})</h4>
+                  <div className="reports-grid">
+                    {myTeachers.map((connection) => (
+                      <motion.div
+                        key={connection.id}
+                        className="report-card"
+                        variants={cardVariants}
+                        initial="hidden"
+                        animate="visible"
+                        whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
+                      >
+                        <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👩‍🏫</div>
+                        <h4>{connection.teacherEmail}</h4>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--spacing-xs)' }}>
+                          Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}
+                        </p>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Your Parents Section */}
+            <div style={{ marginBottom: '2.5rem' }}>
+              <h3 id="your-parents-heading" style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>👨‍👩‍👧‍👦 My Parents/Guardians</h3>
+              {myParents.length === 0 ? (
+                <div className="reports-empty">
+                  <p>You did not connect with any of your parents/guardians yet.</p>
+                  <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
+                    Parents/Guardians can send you connection requests, which will appear in your Requests section below.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <h4 style={{ 
+                    fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', 
+                    marginBottom: 'var(--spacing-sm)', 
+                    color: 'var(--text-secondary)',
+                    fontWeight: 500
+                  }}>Connected Parents/Guardians ({myParents.length})</h4>
+                  <div className="reports-grid">
+                    {myParents.map((connection) => (
+                      <motion.div
+                        key={connection.id}
+                        className="report-card"
+                        variants={cardVariants}
+                        initial="hidden"
+                        animate="visible"
+                        whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
+                      >
+                        <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👨‍👩‍👧‍👦</div>
+                        <h4>{connection.parentEmail}</h4>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--spacing-xs)' }}>
+                          Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}
+                        </p>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Connection Requests Section */}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                <h3 id="requests-heading" style={{ 
+                  margin: 0, 
+                  fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)',
+                  fontWeight: 600,
+                  color: 'var(--text-color)'
+                }}>📬 Requests</h3>
             <motion.button
               onClick={fetchConnections}
               disabled={refreshingConnections}
@@ -1174,84 +1449,53 @@ export function StudentHome() {
             )}
             </>
           )}
+            </div>
         </motion.section>
 
-        {/* Your Teachers Section */}
+          {/* My Tools Hub */}
         <motion.section
           className="reports-history"
-          aria-labelledby="your-teachers-heading"
+            aria-labelledby="tools-hub-heading"
           variants={itemVariants}
-        >
-          <h3 id="your-teachers-heading">Your Teachers 👩‍🏫</h3>
-          {myTeachers.length === 0 ? (
-            <div className="reports-empty">
-              <p>You don't have any connected teachers yet.</p>
-              <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
-                Search for teachers above and send them connection requests, or wait for teachers to request you.
-              </p>
+            style={{ 
+              border: '2px solid rgba(255, 193, 7, 0.2)', 
+              borderRadius: '20px', 
+              padding: '2rem',
+              background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.08) 0%, rgba(255, 152, 0, 0.08) 100%)',
+              boxShadow: '0 8px 32px rgba(255, 193, 7, 0.1)',
+              minHeight: '500px',
+              display: 'flex',
+              flexDirection: 'column',
+              gridColumn: '1 / -1',
+              maxWidth: '600px',
+              justifySelf: 'center'
+            }}
+          >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 'var(--spacing-md)', 
+              marginBottom: '2rem',
+              paddingBottom: '1.5rem',
+              borderBottom: '2px solid rgba(255, 193, 7, 0.15)'
+            }}>
+              <span style={{ fontSize: '3rem' }}>⚙️</span>
+              <h2 id="tools-hub-heading" style={{ 
+                margin: 0, 
+                fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier) * 1.2)',
+                fontWeight: 700,
+                color: '#ff9800'
+              }}>My Tools</h2>
             </div>
-          ) : (
-            <div className="reports-grid">
-              {myTeachers.map((connection) => (
-                <motion.div
-                  key={connection.id}
-                  className="report-card"
-                  variants={cardVariants}
-                  initial="hidden"
-                  animate="visible"
-                  whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                >
-                  <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👩‍🏫</div>
-                  <h4>{connection.teacherEmail}</h4>
-                  <p>Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}</p>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.section>
 
-        {/* Your Parents Section */}
-        <motion.section
-          className="reports-history"
-          aria-labelledby="your-parents-heading"
-          variants={itemVariants}
-        >
-          <h3 id="your-parents-heading">Your Parents 👨‍👩‍👧‍👦</h3>
-          {myParents.length === 0 ? (
-            <div className="reports-empty">
-              <p>You don't have any connected parents yet.</p>
-              <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
-                Parents can send you connection requests, which will appear in your Connection Requests section above.
-              </p>
-            </div>
-          ) : (
-            <div className="reports-grid">
-              {myParents.map((connection) => (
-                <motion.div
-                  key={connection.id}
-                  className="report-card"
-                  variants={cardVariants}
-                  initial="hidden"
-                  animate="visible"
-                  whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                >
-                  <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👨‍👩‍👧‍👦</div>
-                  <h4>{connection.parentEmail}</h4>
-                  <p>Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}</p>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.section>
-
-        <motion.section
-          className="accessibility-controls"
-          aria-labelledby="accessibility-heading"
-          variants={itemVariants}
-          whileHover={{ y: -2 }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
-          <h3 id="accessibility-heading">Accessibility Settings</h3>
+            {/* Accessibility Settings */}
+            <div style={{ marginBottom: '2.5rem' }}>
+              <h3 id="accessibility-heading" style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>♿ Accessibility</h3>
           
           <div className="control-group">
             <label htmlFor="text-size">
@@ -1298,97 +1542,83 @@ export function StudentHome() {
               Increases contrast for better visibility
             </p>
           </div>
-        </motion.section>
-
-        {/* Learning Reports History Section */}
-        <motion.section
-          className="reports-history"
-          aria-labelledby="reports-heading"
-          variants={itemVariants}
-          whileHover={{ y: -2 }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
-          <h3 id="reports-heading">📊 Your Learning Reports History</h3>
-          
-          {loadingReports ? (
-            <div className="reports-loading">
-              <p>Loading your reports...</p>
             </div>
-          ) : reports.length === 0 ? (
-            <div className="reports-empty">
-              <p>No learning reports yet. Start your first learning session to see your progress!</p>
+
+            {/* Messages Section */}
+            <div style={{ marginBottom: '2.5rem' }}>
+              <h3 style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>💬 Messages</h3>
               <motion.button
-                onClick={() => { setNavigating(true); navigate('/learn'); }}
+                onClick={() => { setNavigating(true); navigate('/messages'); }}
                 className="logout-button"
-                aria-label="Start your learning"
+                aria-label="Open messages"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: 'spring', stiffness: 400 }}
-                style={{ marginTop: '1rem' }}
+                style={{ 
+                  width: '100%',
+                  padding: '1rem 1.5rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)',
+                  position: 'relative',
+                  fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))'
+                }}
               >
-                Start Learning
+                {unreadMessageCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    background: 'var(--error-color)',
+                    color: 'white',
+                    borderRadius: '50%',
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold'
+                  }}>
+                    {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                  </span>
+                )}
+                Open Messages {unreadMessageCount > 0 && `(${unreadMessageCount} unread)`}
               </motion.button>
             </div>
-          ) : (
-            <div className="reports-grid">
-              {reports.map((report, index) => (
-                <motion.div
-                  key={report.id}
-                  className="report-card"
-                  variants={cardVariants}
-                  initial="hidden"
-                  animate="visible"
-                  transition={{ delay: index * 0.1 }}
-                  whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                >
-                  <div className="report-header">
-                    <h4>Session Report</h4>
-                    <span className="report-date">
-                      {new Date(report.sessionDate).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </span>
-                  </div>
-                  
-                  <div className="report-metrics">
-                    <div className="metric-item">
-                      <span className="metric-label">Success Rate</span>
-                      <span className="metric-value success">{Math.round(report.successRate)}%</span>
-                    </div>
-                    <div className="metric-item">
-                      <span className="metric-label">Attempts</span>
-                      <span className="metric-value">{report.totalAttempts}</span>
-                    </div>
-                    <div className="metric-item">
-                      <span className="metric-label">Successes</span>
-                      <span className="metric-value">{report.totalSuccesses}</span>
-                    </div>
-                    <div className="metric-item">
-                      <span className="metric-label">Help Requests</span>
-                      <span className="metric-value">{report.totalHelpRequests}</span>
-                    </div>
-                  </div>
 
-                  <div className="report-profile">
-                    <div className="profile-item">
-                      <strong>Best Modes:</strong> {report.profile.bestModes}
-                    </div>
-                    <div className="profile-item">
-                      <strong>Strengths:</strong> {report.profile.strengths}
-                    </div>
-                    <div className="profile-item">
-                      <strong>Recommendation:</strong> {report.profile.recommended}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+            {/* Settings Section */}
+            <div style={{ flex: 1 }}>
+              <h3 style={{ 
+                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
+                marginBottom: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--text-color)'
+              }}>⚙️ Settings</h3>
+              <motion.button
+                onClick={() => setShowAccessibilityModal(true)}
+                className="logout-button"
+                aria-label="Open accessibility settings"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400 }}
+                style={{ 
+                  width: '100%',
+                  padding: '1rem 1.5rem',
+                  background: 'linear-gradient(135deg, var(--disability-green) 0%, #00A86B 100%)',
+                  boxShadow: '0 8px 24px rgba(0, 132, 61, 0.4)',
+                  fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))'
+                }}
+              >
+                Advanced Settings
+              </motion.button>
             </div>
-          )}
-        </motion.section>
+          </motion.section>
+                  </div>
 
         {/* Assignment Selection Modal */}
         {showAssignmentModal && (

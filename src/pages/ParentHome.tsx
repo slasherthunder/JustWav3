@@ -9,6 +9,7 @@ import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { Timestamp } from 'firebase/firestore';
 import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
+import logoImage from '../assets/images/logo.png';
 
 interface ParentConnectionRequest {
   id: string;
@@ -899,7 +900,7 @@ export function ParentHome() {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
         >
-          JustWav3 👨‍👩‍👧‍👦
+          <img src={logoImage} alt="JustWav3" style={{ maxHeight: '50px', width: 'auto', verticalAlign: 'middle' }} /> 👨‍👩‍👧‍👦
         </motion.h1>
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
           <motion.button

@@ -9,6 +9,7 @@ import { Home } from './pages/Home';
 import { Landing } from './pages/Landing';
 import { PageTransition } from './components/PageTransition';
 import { Learn } from './pages/Learn';
+import { LearnDemo } from './pages/LearnDemo';
 import { Practice } from './pages/Practice';
 import { Messages } from './pages/Messages';
 import { CreateMCQ } from './pages/CreateMCQ';
@@ -44,6 +45,10 @@ function AnimatedRoutes() {
                 <Learn />
               </PrivateRoute>
             }
+          />
+          <Route
+            path="/learn-demo"
+            element={<LearnDemo />}
           />
           <Route
             path="/messages"

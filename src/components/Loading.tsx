@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import './Loading.css';
+import logoImage from '../assets/images/logo.png';
 
 export function Loading() {
   // Waving hand animation
@@ -81,7 +82,7 @@ export function Loading() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1 }}
           >
-            JustWav3
+            <img src={logoImage} alt="JustWav3" style={{ maxHeight: '50px', width: 'auto' }} />
           </motion.h2>
           <motion.p
             initial={{ opacity: 0 }}

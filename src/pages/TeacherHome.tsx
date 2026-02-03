@@ -11,6 +11,7 @@ import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
 import { createAssignment, notifyStudentsOfAssignment } from '../utils/assignments';
 import type { AssignmentSettings } from '../types/assignments';
 import './Home.css';
+import logoImage from '../assets/images/logo.png';
 
 interface MCQSet {
   id: string;
@@ -1174,7 +1175,7 @@ export function TeacherHome() {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
         >
-          JustWav3 👩‍🏫
+          <img src={logoImage} alt="JustWav3" style={{ maxHeight: '50px', width: 'auto', verticalAlign: 'middle' }} /> 👩‍🏫
         </motion.h1>
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
           <motion.button

@@ -3,17 +3,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Helper function to check if requesting user is a teacher
+    // FIXED: Safely check if user document exists and has role field
     function isTeacher() {
       return request.auth != null && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'teacher';
     }
 
     // Helper function to check if requesting user is a parent
+    // FIXED: Safely check if user document exists and has role field
     function isParent() {
       return request.auth != null && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'parent';
     }
 
     match /users/{userId} {
@@ -220,6 +222,93 @@ service cloud.firestore {
       allow delete: if request.auth != null &&
                     (resource.data.studentId == request.auth.uid ||
                      resource.data.parentId == request.auth.uid);
+    }
+
+    // MCQ Sets collection
+    match /mcqSets/{mcqSetId} {
+      // Teachers can create MCQ sets (must be the owner)
+      allow create: if request.auth != null && 
+                    isTeacher() && 
+                    request.resource.data.userId == request.auth.uid;
+      
+      // Teachers can read their own MCQ sets
+      // Students can read MCQ sets that are assigned to them (via assignments)
+      // For now, allow authenticated users to read (assignment validation happens in app code)
+      allow read: if request.auth != null;
+      
+      // Teachers can update/delete their own MCQ sets
+      allow update, delete: if request.auth != null && 
+                            isTeacher() && 
+                            resource.data.userId == request.auth.uid;
+    }
+
+    // Assignments collection
+    match /assignments/{assignmentId} {
+      // Teachers can create assignments
+      allow create: if request.auth != null && 
+                    isTeacher() && 
+                    request.resource.data.teacherId == request.auth.uid;
+      
+      // Teachers can read their own assignments
+      // Students can read assignments (validation happens in app code)
+      // Note: Firestore rules don't easily support array membership checks,
+      // so we allow authenticated users to read and validate in app code
+      allow read: if request.auth != null;
+      
+      // Only the teacher who created the assignment can update it
+      allow update: if request.auth != null && 
+                    isTeacher() && 
+                    resource.data.teacherId == request.auth.uid;
+      
+      // Only the teacher who created the assignment can delete it
+      allow delete: if request.auth != null && 
+                    isTeacher() && 
+                    resource.data.teacherId == request.auth.uid;
+    }
+
+    // Submissions collection
+    match /submissions/{submissionId} {
+      // Students can create their own submissions
+      allow create: if request.auth != null && 
+                    request.resource.data.studentId == request.auth.uid;
+      
+      // Students can read their own submissions
+      // Teachers can read submissions for their assignments
+      allow read: if request.auth != null && 
+                  (resource.data.studentId == request.auth.uid ||
+                   (isTeacher() && resource.data.teacherId == request.auth.uid));
+      
+      // Students cannot update submissions after creation (immutable)
+      // Teachers can update to add feedback/comments in the future
+      allow update: if request.auth != null && 
+                    isTeacher() && 
+                    resource.data.teacherId == request.auth.uid;
+      
+      // Only teachers can delete submissions (for moderation)
+      allow delete: if request.auth != null && 
+                    isTeacher() && 
+                    resource.data.teacherId == request.auth.uid;
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // System/teachers can create notifications (handled in app code)
+      allow create: if request.auth != null;
+      
+      // Users can only read their own notifications
+      allow read: if request.auth != null && 
+                  resource.data.userId == request.auth.uid;
+      
+      // Users can update their own notifications (e.g., mark as read)
+      allow update: if request.auth != null && 
+                    resource.data.userId == request.auth.uid &&
+                    // Only allow updating isRead and readAt fields
+                    request.resource.data.diff(resource.data).affectedKeys()
+                      .hasOnly(['isRead', 'readAt']);
+      
+      // Users can delete their own notifications
+      allow delete: if request.auth != null && 
+                    resource.data.userId == request.auth.uid;
     }
 
     match /{document=**} { 

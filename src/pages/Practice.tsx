@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import { useNavigation } from '../contexts/NavigationContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './Home.css';
-import './Learn.css';
+import './Practice.css';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { Hands } from '@mediapipe/hands';
@@ -13,7 +13,7 @@ import { db } from '../firebase/config';
 import { BuddyButton } from '../components/BuddyButton';
 import { BuddyPracticeGame } from '../components/BuddyPracticeGame';
 import { BuddyHelpGuide } from '../components/BuddyHelpGuide';
-import threeFingersIcon from "../assets/images/three_fingers_up.png"
+import threeFingersIcon from '../assets/images/three_fingers_up.png';
 
 type LearningMode = 'audio' | 'image' | 'icons' | 'gesture' | 'simple';
 type GestureType = 'open' | 'fist' | 'point' | 'wave' | '1' | '2' | '3' | '4' | 'thumbsUp' | 'thumbsDown' | '-';
@@ -28,18 +28,21 @@ interface ModeStats {
   successes: number;
 }
 
-export function Learn() {
+export function Practice() {
   const { setNavigating } = useNavigation();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
+  const assignmentId = searchParams.get('assignmentId');
   const [savingReport, setSavingReport] = useState(false);
   const [reportSaved, setReportSaved] = useState(false);
-  const saveInProgressRef = useRef(false); // Prevent duplicate saves
+  const saveInProgressRef = useRef(false);
   
   // MediaPipe Hands and Webcam states
   const [mpStatus, setMpStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const handsRef = useRef<Hands | null>(null);
   const cameraRef = useRef<Camera | null>(null);
   const [mediaReady, setMediaReady] = useState(false);
@@ -64,95 +67,26 @@ export function Learn() {
   const [sessionOver, setSessionOver] = useState(false);
   
   // Adaptive learning features
-  const [difficulty, setDifficulty] = useState<number>(1); // 1-5 scale (1=simplest, 5=most complex)
-  const [autoSwitched, setAutoSwitched] = useState<boolean>(false); // Track if auto-switch happened
-  const [_persistentProfile, setPersistentProfile] = useState<any>(null); // Loaded from Firestore (prefixed with _ to avoid unused warning)
-  const [switchReason, setSwitchReason] = useState<string | null>(null); // Track reason for mode switch
-  const [showSwitchTooltip, setShowSwitchTooltip] = useState<boolean>(false); // Show "Why am I seeing this?" tooltip
+  const [difficulty, setDifficulty] = useState<number>(1);
+  const [autoSwitched, setAutoSwitched] = useState<boolean>(false);
+  const [_persistentProfile, setPersistentProfile] = useState<any>(null);
+  const [switchReason, setSwitchReason] = useState<string | null>(null);
+  const [showSwitchTooltip, setShowSwitchTooltip] = useState<boolean>(false);
   
-  // Questions array
-  const questions = [
-    {
-      text: 'A teacher has 12 stickers and wants to share them evenly among 3 students. How many stickers will each student get?',
-      answers: [
-        { letter: 'A', value: '3' },
-        { letter: 'B', value: '4' },
-        { letter: 'C', value: '5' },
-        { letter: 'D', value: '6' }
-      ],
-      correctAnswers: ['B'] // 12 / 3 = 4
-    },
-    {
-      text: 'Which of the following are primary colors? (Select all that apply)',
-      answers: [
-        { letter: 'A', value: 'Red' },
-        { letter: 'B', value: 'Green' },
-        { letter: 'C', value: 'Blue' },
-        { letter: 'D', value: 'Orange' }
-      ],
-      correctAnswers: ['A', 'C'] // Red and Blue are primary colors
-    }
-  ];
-  
+  // Assignment loading states
+  const [loading, setLoading] = useState(true);
+  const [questions, setQuestions] = useState<any[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const currentQuestion = questions[currentQuestionIndex];
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [answerFeedback, setAnswerFeedback] = useState<string | null>(null);
-  const [streak, setStreak] = useState(0); // Track consecutive correct answers
-  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  
-  // Simple content for audio/text modes - always the question text
-  const content = currentQuestion.text;
-  
-  // Difficulty-based theme colors (1 = soft pastels, 5 = bold pro colors)
-  const getDifficultyTheme = (diff: number) => {
-    const themes: Record<number, { primary: string; secondary: string; accent: string; text: string; border: string; background: string }> = {
-      1: { // Beginner - Soft pastels
-        primary: '#E8F5E9', // Light green
-        secondary: '#F3E5F5', // Light purple
-        accent: '#FFF9C4', // Light yellow
-        text: '#2E7D32', // Dark green
-        border: '#A5D6A7', // Pastel green
-        background: '#F1F8E9' // Very light green
-      },
-      2: { // Easy - Soft colors
-        primary: '#C8E6C9', // Medium green
-        secondary: '#E1BEE7', // Medium purple
-        accent: '#FFE082', // Medium yellow
-        text: '#388E3C', // Medium green
-        border: '#81C784', // Medium pastel green
-        background: '#E8F5E9' // Light green
-      },
-      3: { // Medium - Balanced colors
-        primary: '#A5D6A7', // Standard green
-        secondary: '#CE93D8', // Standard purple
-        accent: '#FFD54F', // Standard yellow
-        text: '#4CAF50', // Standard green
-        border: '#66BB6A', // Standard green
-        background: '#E8F5E9' // Light green
-      },
-      4: { // Hard - Bold colors
-        primary: '#81C784', // Bold green
-        secondary: '#BA68C8', // Bold purple
-        accent: '#FFC107', // Bold yellow
-        text: '#2E7D32', // Dark green
-        border: '#4CAF50', // Bold green
-        background: '#C8E6C9' // Medium green
-      },
-      5: { // Expert - Pro colors (deep blues/gold)
-        primary: '#1565C0', // Deep blue
-        secondary: '#6A1B9A', // Deep purple
-        accent: '#F57F17', // Gold
-        text: '#0D47A1', // Very dark blue
-        border: '#1976D2', // Deep blue
-        background: '#E3F2FD' // Light blue
-      }
-    };
-    const level = Math.max(1, Math.min(5, Math.round(diff))) as 1 | 2 | 3 | 4 | 5;
-    return themes[level] || themes[1];
-  };
-  
-  const theme = getDifficultyTheme(difficulty);
+
+  // Buddy Button states
+  type BuddyMode = 'none' | 'try-me' | 'practice' | 'help';
+  const [buddyMode, setBuddyMode] = useState<BuddyMode>('none');
+  const [showPracticeGame, setShowPracticeGame] = useState(false);
+  const [showHelpGuide, setShowHelpGuide] = useState(false);
+  const [hoveredElement, setHoveredElement] = useState<string | null>(null);
   
   // Mode statistics tracking
   const [modeStats, setModeStats] = useState<Record<LearningMode, ModeStats>>({
@@ -166,13 +100,6 @@ export function Learn() {
   // Current question tracking for check-ins
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [checkInQuestion, setCheckInQuestion] = useState('');
-
-  // Buddy Button states
-  type BuddyMode = 'none' | 'try-me' | 'practice' | 'help';
-  const [buddyMode, setBuddyMode] = useState<BuddyMode>('none');
-  const [showPracticeGame, setShowPracticeGame] = useState(false);
-  const [showHelpGuide, setShowHelpGuide] = useState(false);
-  const [hoveredElement, setHoveredElement] = useState<string | null>(null);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -203,7 +130,185 @@ export function Learn() {
     }
   };
 
-  // Load persistent learning profile from Firestore
+  // Load assignment and questions
+  useEffect(() => {
+    const loadAssignment = async () => {
+      if (!assignmentId || !currentUser) {
+        navigate('/home');
+        return;
+      }
+
+      try {
+        // Load assignment
+        const assignmentDoc = await getDoc(doc(db, 'assignments', assignmentId));
+        if (!assignmentDoc.exists()) {
+          console.error('[Practice] Assignment document does not exist:', assignmentId);
+          setLoading(false);
+          alert('Assignment not found');
+          navigate('/home');
+          return;
+        }
+
+        console.log('[Practice] Assignment document found, reading data...');
+        const assignmentData = assignmentDoc.data();
+        console.log('[Practice] Assignment data:', {
+          mcqSetId: assignmentData?.mcqSetId,
+          assignedStudentIds: assignmentData?.assignedStudentIds
+        });
+
+        if (!assignmentData?.assignedStudentIds?.includes(currentUser.uid)) {
+          console.error('[Practice] User not assigned to assignment');
+          setLoading(false);
+          alert('You are not assigned to this assignment');
+          navigate('/home');
+          return;
+        }
+
+        const mcqSetId = assignmentData.mcqSetId;
+        if (!mcqSetId) {
+          console.error('[Practice] Assignment missing mcqSetId');
+          setLoading(false);
+          alert('Assignment has no MCQ set');
+          navigate('/home');
+          return;
+        }
+
+        // Load MCQ set
+        console.log('[Practice] Loading MCQ set:', mcqSetId);
+        const mcqSetDoc = await getDoc(doc(db, 'mcqSets', mcqSetId));
+        if (!mcqSetDoc.exists()) {
+          console.error('[Practice] MCQ set document does not exist:', mcqSetId);
+          setLoading(false);
+          alert('MCQ set not found');
+          navigate('/home');
+          return;
+        }
+
+        console.log('[Practice] MCQ set document found, reading slides...');
+        const mcqSetData = mcqSetDoc.data();
+        const slides = mcqSetData?.slides || [];
+        console.log('[Practice] Slides count:', slides.length);
+
+        // Convert slides to questions
+        const processedQuestions = slides
+          .filter((slide: any) => slide?.question && Array.isArray(slide?.options))
+          .map((slide: any, index: number) => {
+            const options = slide.options.filter((opt: any) => opt && String(opt).trim() !== '');
+            
+            return {
+              text: slide.question || `Question ${index + 1}`,
+              answers: options.map((opt: string, idx: number) => ({
+                letter: String.fromCharCode(65 + idx),
+                value: String(opt).trim()
+              })),
+              correctAnswer: (slide.correctAnswer || '').trim(),
+              correctAnswers: Array.isArray(slide.correctAnswers) 
+                ? slide.correctAnswers.map((ca: any) => String(ca).trim()).filter(Boolean)
+                : [],
+              questionType: slide.questionType || 'multipleChoice',
+              imageData: slide.imageData || null
+            };
+          })
+          .filter((q: any) => q.answers.length > 0);
+
+        console.log('[Practice] Processed questions count:', processedQuestions.length);
+
+        if (processedQuestions.length === 0) {
+          console.error('[Practice] No valid questions after processing');
+          setLoading(false);
+          alert('No valid questions found in this assignment');
+          navigate('/home');
+          return;
+        }
+
+        // Apply shuffle settings
+        let finalQuestions = processedQuestions;
+        if (assignmentData.settings?.shuffleQuestions) {
+          for (let i = finalQuestions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [finalQuestions[i], finalQuestions[j]] = [finalQuestions[j], finalQuestions[i]];
+          }
+        }
+
+        if (assignmentData.settings?.shuffleOptions) {
+          finalQuestions = finalQuestions.map((q: any) => {
+            const shuffledIndices = [...Array(q.answers.length).keys()];
+            for (let i = shuffledIndices.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+            }
+
+            const shuffledAnswers = shuffledIndices.map((idx) => q.answers[idx]);
+            const originalCorrectAnswer = q.correctAnswer;
+            const originalCorrectAnswers = q.correctAnswers;
+
+            // Find new letter for correct answer(s)
+            let newCorrectAnswer = '';
+            let newCorrectAnswers: string[] = [];
+
+            if (q.questionType === 'multipleChoice') {
+              const correctIndex = q.answers.findIndex((a: any) => a.value === originalCorrectAnswer);
+              if (correctIndex >= 0) {
+                const newIndex = shuffledIndices.indexOf(correctIndex);
+                newCorrectAnswer = shuffledAnswers[newIndex].letter;
+              }
+            } else {
+              newCorrectAnswers = originalCorrectAnswers.map((correctValue: string) => {
+                const correctIndex = q.answers.findIndex((a: any) => a.value === correctValue);
+                if (correctIndex >= 0) {
+                  const newIndex = shuffledIndices.indexOf(correctIndex);
+                  return shuffledAnswers[newIndex].letter;
+                }
+                return '';
+              }).filter(Boolean);
+            }
+
+            return {
+              ...q,
+              answers: shuffledAnswers,
+              correctAnswer: newCorrectAnswer, // After shuffle, correctAnswer is a letter (A, B, C, D)
+              correctAnswers: newCorrectAnswers
+            };
+          });
+        }
+        
+        // Always convert correctAnswer to letter for consistency (even if not shuffled)
+        finalQuestions = finalQuestions.map((q: any) => {
+          // If correctAnswer is still a value (not shuffled), convert to letter
+          if (q.correctAnswer && q.correctAnswer.length > 1) {
+            const correctAnswerObj = q.answers.find((a: any) => a.value === q.correctAnswer);
+            if (correctAnswerObj) {
+              return {
+                ...q,
+                correctAnswer: correctAnswerObj.letter // Convert value to letter
+              };
+            }
+          }
+          return q;
+        });
+
+        setQuestions(finalQuestions);
+        setCurrentQuestionIndex(0);
+        setLoading(false);
+
+      } catch (error) {
+        console.error('Error loading assignment:', error);
+        console.error('Error details:', {
+          message: error instanceof Error ? error.message : String(error),
+          code: (error as any)?.code,
+          assignmentId,
+          currentUserId: currentUser?.uid
+        });
+        setLoading(false);
+        alert(`Failed to load assignment: ${error instanceof Error ? error.message : String(error)}`);
+        navigate('/home');
+      }
+    };
+
+    loadAssignment();
+  }, [assignmentId, currentUser, navigate]);
+
+  // Load persistent learning profile
   useEffect(() => {
     async function loadPersistentProfile() {
       if (!currentUser) return;
@@ -214,33 +319,28 @@ export function Learn() {
           const profileData = profileDoc.data();
           setPersistentProfile(profileData);
           
-          // Initialize difficulty based on historical performance
           if (profileData.averageAccuracy !== undefined) {
             if (profileData.averageAccuracy >= 80) {
-              setDifficulty(Math.min(5, (profileData.averageDifficulty || 1) + 1)); // Increase difficulty if doing well
+              setDifficulty(Math.min(5, (profileData.averageDifficulty || 1) + 1));
             } else if (profileData.averageAccuracy < 50) {
-              setDifficulty(Math.max(1, (profileData.averageDifficulty || 3) - 1)); // Decrease difficulty if struggling
+              setDifficulty(Math.max(1, (profileData.averageDifficulty || 3) - 1));
             } else {
-              setDifficulty(profileData.averageDifficulty || 3); // Maintain current difficulty
+              setDifficulty(profileData.averageDifficulty || 3);
             }
           } else {
-            setDifficulty(profileData.averageDifficulty || 1); // Start at easiest
+            setDifficulty(profileData.averageDifficulty || 1);
           }
         } else {
-          // First time user - start at easiest difficulty
           setDifficulty(1);
         }
-        } catch (error) {
+      } catch (error) {
         console.error('Error loading persistent profile:', error);
-        // Default to easiest difficulty on error
         setDifficulty(1);
       }
     }
     
     loadPersistentProfile();
   }, [currentUser]);
-
-  // Content is now the question text, no need to update based on difficulty
 
   function goBack() {
     setNavigating(true);
@@ -254,7 +354,6 @@ export function Learn() {
     setGestureState('IDLE');
     setLastConfirmedGesture('-');
     setErrorMessage('');
-    // Reinitialize MediaPipe Hands
     if (handsRef.current) {
       handsRef.current.close();
       handsRef.current = null;
@@ -273,7 +372,6 @@ export function Learn() {
   function toggleGestureDetection() {
     setGestureDetectionEnabled(!gestureDetectionEnabled);
     if (gestureDetectionEnabled) {
-      // Stop detection
       setGesture('-');
       setGestureConfidence(0);
       setGestureState('IDLE');
@@ -281,7 +379,6 @@ export function Learn() {
         cameraRef.current.stop();
       }
     } else {
-      // Resume detection
       if (handsRef.current && webcamRef.current?.video) {
         const camera = new Camera(webcamRef.current.video, {
           onFrame: async () => {
@@ -298,11 +395,10 @@ export function Learn() {
     }
   }
 
-  // Smooth gesture detection using history buffer
+  // Smooth gesture detection
   function getSmoothedGesture(history: Array<{ gesture: GestureType; confidence: number; time: number }>): { gesture: GestureType; confidence: number } {
     if (history.length === 0) return { gesture: '-', confidence: 0 };
     
-    // Group by gesture type and calculate weighted confidence
     const gestureGroups: Record<string, { count: number; totalConfidence: number }> = {};
     
     for (const entry of history) {
@@ -316,13 +412,12 @@ export function Learn() {
       gestureGroups[key].totalConfidence += entry.confidence;
     }
     
-    // Find the most common gesture with highest confidence
     let bestGesture: GestureType = '-';
     let bestScore = 0;
     
     for (const [gesture, data] of Object.entries(gestureGroups)) {
       const avgConfidence = data.totalConfidence / data.count;
-      const score = data.count * avgConfidence; // Weight by both frequency and confidence
+      const score = data.count * avgConfidence;
       
       if (score > bestScore) {
         bestScore = score;
@@ -330,7 +425,6 @@ export function Learn() {
       }
     }
     
-    // Calculate final confidence
     if (bestGesture !== '-' && gestureGroups[bestGesture]) {
       const avgConfidence = gestureGroups[bestGesture].totalConfidence / gestureGroups[bestGesture].count;
       const frequencyBoost = (gestureGroups[bestGesture].count / history.length) * 10;
@@ -340,93 +434,95 @@ export function Learn() {
     return { gesture: bestGesture, confidence: 0 };
   }
 
-  // Improved finger extension detection using distance and angle
+  // Improved finger extension detection
   function isFingerExtended(tip: any, pip: any, mcp: any): boolean {
-    // Method 1: Y-coordinate check (simple vertical) - finger tip must be clearly above PIP
-    // Use stricter threshold - tip must be at least 0.02 units above PIP
     const verticalCheck = tip.y < pip.y - 0.02;
-    
-    // Method 2: Distance from MCP (more robust)
     const distFromMcp = Math.sqrt(
       Math.pow(tip.x - mcp.x, 2) + Math.pow(tip.y - mcp.y, 2)
     );
     const pipDistFromMcp = Math.sqrt(
       Math.pow(pip.x - mcp.x, 2) + Math.pow(pip.y - mcp.y, 2)
     );
-    // Require tip to be at least 15% further from MCP than PIP (much stricter)
     const distanceCheck = distFromMcp > pipDistFromMcp * 1.15;
+    const angleCheck = distFromMcp > pipDistFromMcp * 1.2;
     
-    // Method 3: Angle check (tip should be significantly further out from MCP than PIP)
-    const angleCheck = distFromMcp > pipDistFromMcp * 1.2; // Require 20% more distance
-    
-    // Require ALL 3 checks to pass for finger to be considered extended (much stricter)
-    // This prevents false positives where fingers appear extended when they're actually closed
     return verticalCheck && distanceCheck && angleCheck;
   }
 
   // Helper function to check if a single hand shows thumbs down
   function isThumbsDown(landmarks: any[]): boolean {
     if (!landmarks || landmarks.length < 21) return false;
-
+    
     const thumbTip = landmarks[4];
+    const wrist = landmarks[0];
     const indexMcp = landmarks[5];
-
+    
     // 1. Vertical Check: Is the thumb tip significantly lower than the knuckles?
+    // Use index MCP as reference point (more stable than thumb IP)
     const isDown = thumbTip.y > indexMcp.y + 0.05;
-
-    // 2. Fist Check: Are the other fingers curled? 
+    
+    // 2. Fist Check: Are the other fingers curled?
     // (Comparing finger tips to their respective MCP joints)
-    const fingersCurled = [8, 12, 16, 20].every(tipIdx => 
-      landmarks[tipIdx].y > landmarks[tipIdx - 3].y
-    );
-
-    return isDown && fingersCurled;
+    const indexTip = landmarks[8];
+    const middleTip = landmarks[12];
+    const ringTip = landmarks[16];
+    const pinkyTip = landmarks[20];
+    
+    const indexMcpJoint = landmarks[5];
+    const middleMcpJoint = landmarks[9];
+    const ringMcpJoint = landmarks[13];
+    const pinkyMcpJoint = landmarks[17];
+    
+    const fingersCurled = [
+      indexTip.y > indexMcpJoint.y,
+      middleTip.y > middleMcpJoint.y,
+      ringTip.y > ringMcpJoint.y,
+      pinkyTip.y > pinkyMcpJoint.y
+    ].every(curled => curled);
+    
+    // 3. Additional validation: thumb should be below wrist
+    const thumbBelowWrist = thumbTip.y > wrist.y - 0.05;
+    
+    return isDown && fingersCurled && thumbBelowWrist;
   }
 
   // Classify gesture from hand landmarks
   function classifyGestureFromLandmarks(allLandmarks: any[] | any): { gesture: GestureType; confidence: number } {
-    // Handle both single hand (backward compatibility) and multiple hands
     const landmarksArray = Array.isArray(allLandmarks) && allLandmarks.length > 0 && Array.isArray(allLandmarks[0]) 
-      ? allLandmarks as any[][]  // Multiple hands
-      : [allLandmarks as any[]]; // Single hand (convert to array for consistency)
+      ? allLandmarks as any[][]
+      : [allLandmarks as any[]];
     
-    // CRITICAL: Check for two thumbs down FIRST when 2+ hands are detected
-    // This must happen BEFORE checking for number gestures to avoid confusion
     if (landmarksArray.length >= 2) {
       console.log(`🔍 Detected ${landmarksArray.length} hands - checking for two thumbs down FIRST`);
       
       let thumbsDownCount = 0;
       let totalHands = landmarksArray.length;
       
-      // Check each hand for thumbs down
       for (let i = 0; i < landmarksArray.length; i++) {
         const isDown = isThumbsDown(landmarksArray[i]);
-        console.log(`  Hand ${i + 1}: ${isDown ? 'Thumbs Down' : 'Other gesture'}`);
+        console.log(`  Hand ${i + 1}: ${isDown ? 'Thumbs Down' : 'Other gesture'}`, {
+          thumbTipY: landmarksArray[i][4]?.y,
+          indexMcpY: landmarksArray[i][5]?.y,
+          difference: landmarksArray[i][4]?.y - landmarksArray[i][5]?.y
+        });
         if (isDown) {
           thumbsDownCount++;
         }
       }
       
-      // If 2 or more hands show thumbs down, prioritize this over any number gesture
-      // This ensures "two thumbs down" is never confused with "4 fingers" from two hands
+      console.log(`📊 Thumbs down count: ${thumbsDownCount} out of ${landmarksArray.length} hands`);
+      
       if (thumbsDownCount >= 2) {
-        console.log(`✅ Two thumbs down detected! (${thumbsDownCount}/${totalHands} hands) - PRIORITY`);
         const confidence = totalHands === 2 && thumbsDownCount === 2 ? 95 : Math.min(90, 80 + (thumbsDownCount / totalHands) * 10);
         return { gesture: 'thumbsDown', confidence };
       }
-      
-      // If we detected 2+ hands but not two thumbs down, we should NOT process as number gesture
-      // Number gestures (1-4) are SINGLE HAND gestures only
-      console.log(`  ⚠️ ${totalHands} hands detected but not two thumbs down - will check single hand gestures only`);
     }
     
-    // Process single hand gestures (use first hand if multiple detected)
     const landmarks = landmarksArray[0];
     if (!landmarks || landmarks.length < 21) {
       return { gesture: '-', confidence: 0 };
     }
 
-    // Get key points with MCP joints for better detection
     const thumbTip = landmarks[4];
     const thumbIp = landmarks[3];
     const indexTip = landmarks[8];
@@ -442,7 +538,6 @@ export function Learn() {
     const pinkyPip = landmarks[18];
     const pinkyMcp = landmarks[17];
 
-    // Improved finger extension detection
     const indexExtended = isFingerExtended(indexTip, indexPip, indexMcp);
     const middleExtended = isFingerExtended(middleTip, middlePip, middleMcp);
     const ringExtended = isFingerExtended(ringTip, ringPip, ringMcp);
@@ -450,73 +545,45 @@ export function Learn() {
 
     const extendedCount = [indexExtended, middleExtended, ringExtended, pinkyExtended].filter(Boolean).length;
     
-    // Debug logging to help diagnose detection issues
-    if (extendedCount > 0) {
-      console.log(`🔍 Finger extension check: ${extendedCount} fingers (index:${indexExtended}, middle:${middleExtended}, ring:${ringExtended}, pinky:${pinkyExtended})`);
-    }
-    
-    // Improved thumb detection
     const thumbExtendedUp = thumbTip.y < thumbIp.y;
     const thumbExtendedDown = thumbTip.y > thumbIp.y && (thumbTip.y - thumbIp.y) > 0.02;
     const thumbHorizontal = Math.abs(thumbTip.x - thumbIp.x) > Math.abs(thumbTip.y - thumbIp.y);
     
-    // Thumbs up: thumb extended upward, other fingers closed (single hand)
+    // Thumbs up
     if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended && 
         thumbExtendedUp && !thumbHorizontal && !thumbExtendedDown) {
-      // Calculate confidence based on how clear the gesture is
       const thumbAngle = Math.abs(thumbTip.x - thumbIp.x);
       const confidence = Math.min(95, 75 + (1 - thumbAngle * 5) * 20);
       return { gesture: 'thumbsUp', confidence: Math.max(80, confidence) };
     }
     
-    // Number gestures (1-4 fingers extended) - SINGLE HAND ONLY
-    // CRITICAL: These gestures refer to ONE hand with 1-4 fingers extended, NOT combined across hands
-    // This ensures "4 fingers" means one hand with 4 fingers, not two hands with 2 fingers each
-    // IMPORTANT: Only check number gestures if thumb is NOT down (thumbs down is checked earlier)
-    // and if we have at least 1 finger extended (to avoid false positives)
+    // Number gestures
     if (!thumbExtendedDown && (thumbHorizontal || !thumbExtendedUp)) {
-      // Debug: Log finger states
-      console.log(`🔍 Checking number gestures - extendedCount: ${extendedCount}, fingers: [index:${indexExtended}, middle:${middleExtended}, ring:${ringExtended}, pinky:${pinkyExtended}]`);
-      
-      // Verify fingers are extended in sequence on THIS SINGLE HAND (for better accuracy)
-      // Each check must verify the exact pattern - strict matching
       if (extendedCount === 1 && indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
-        console.log(`✅ Single hand: 1 finger detected (index extended)`);
         return { gesture: '1', confidence: 90 };
       }
       
       if (extendedCount === 2 && indexExtended && middleExtended && !ringExtended && !pinkyExtended) {
-        console.log(`✅ Single hand: 2 fingers detected (index + middle extended)`);
         return { gesture: '2', confidence: 90 };
       }
       
       if (extendedCount === 3 && indexExtended && middleExtended && ringExtended && !pinkyExtended) {
-        console.log(`✅ Single hand: 3 fingers detected (index + middle + ring extended)`);
         return { gesture: '3', confidence: 90 };
       }
       
       if (extendedCount === 4 && indexExtended && middleExtended && ringExtended && pinkyExtended) {
-        console.log(`✅ Single hand: 4 fingers detected (all 4 fingers extended)`);
         return { gesture: '4', confidence: 90 };
-      }
-      
-      // If extendedCount > 0 but doesn't match patterns, log for debugging
-      if (extendedCount > 0 && extendedCount <= 4) {
-        console.log(`⚠️ Extended count doesn't match pattern: ${extendedCount} (index:${indexExtended}, middle:${middleExtended}, ring:${ringExtended}, pinky:${pinkyExtended})`);
       }
     }
     
     // Pointer finger pointing left/right removed - using buttons for navigation instead
     
-    // Legacy gestures (for backward compatibility)
+    // Legacy gestures
     if (extendedCount === 4 && thumbExtendedUp) {
-      // All fingers extended = open hand
       return { gesture: 'open', confidence: 90 };
     } else if (extendedCount === 0 && !thumbExtendedUp && !thumbExtendedDown) {
-      // No fingers extended = fist
       return { gesture: 'fist', confidence: 85 };
     } else if (extendedCount >= 2 && extendedCount <= 3) {
-      // Partially open = could be wave
       const handMoving = Math.abs(thumbTip.x - thumbIp.x) > 0.15;
       if (handMoving) {
         return { gesture: 'wave', confidence: 70 };
@@ -548,11 +615,15 @@ export function Learn() {
     setCurrentMode(m);
     setModeStart(now);
     
-    // Auto-play audio when switching to audio mode
     if (m === 'audio') {
-      setTimeout(() => speakText(content), 300);
-  }
-  }, []);
+      setTimeout(() => {
+        const currentQuestion = questions[currentQuestionIndex];
+        if (currentQuestion) {
+          speakText(currentQuestion.text);
+        }
+      }, 300);
+    }
+  }, [currentQuestionIndex, questions]);
 
   function speakText(t: string) {
     try {
@@ -567,62 +638,47 @@ export function Learn() {
     }
   }
 
-  // Adaptive difficulty adjustment based on performance
+  // Adaptive difficulty adjustment
   useEffect(() => {
-    if (attempts < 3) return; // Need minimum attempts to assess
+    if (attempts < 3) return;
     
     const currentAccuracy = attempts > 0 ? (successes / attempts) * 100 : 0;
     const avgResponseTime = modeStats[currentMode].responseTime.length > 0
       ? modeStats[currentMode].responseTime.reduce((a, b) => a + b, 0) / modeStats[currentMode].responseTime.length
       : 0;
     
-    // Increase difficulty if accuracy is high and response time is fast
     if (currentAccuracy >= 80 && avgResponseTime < 3000 && difficulty < 5) {
-      setDifficulty((prev) => {
-        const newDiff = Math.min(5, prev + 0.5);
-        console.log(`🎯 Increasing difficulty to ${newDiff} (accuracy: ${currentAccuracy.toFixed(1)}%, response time: ${avgResponseTime.toFixed(0)}ms)`);
-        return newDiff;
-      });
-    }
-    // Decrease difficulty if accuracy is low or frustration is high
-    else if ((currentAccuracy < 50 || modeStats[currentMode].frustration > 3) && difficulty > 1) {
-      setDifficulty((prev) => {
-        const newDiff = Math.max(1, prev - 0.5);
-        console.log(`📉 Decreasing difficulty to ${newDiff} (accuracy: ${currentAccuracy.toFixed(1)}%, frustration: ${modeStats[currentMode].frustration})`);
-        return newDiff;
-      });
+      setDifficulty((prev) => Math.min(5, prev + 0.5));
+    } else if ((currentAccuracy < 50 || modeStats[currentMode].frustration > 3) && difficulty > 1) {
+      setDifficulty((prev) => Math.max(1, prev - 0.5));
     }
   }, [successes, attempts, modeStats, currentMode, difficulty]);
 
-  // Auto mode switching based on frustration
+  // Auto mode switching
   useEffect(() => {
     const currentFrustration = modeStats[currentMode].frustration;
     const currentInteractions = modeStats[currentMode].interactions;
     
-    // If frustration spikes in Audio mode (2+ help requests in short time), auto-switch to Icons or Simple
     if (currentMode === 'audio' && currentFrustration >= 2 && currentInteractions >= 3 && !autoSwitched) {
-      // Choose between Icons and Simple based on which has lower frustration historically
       const iconsFrustration = modeStats.icons.frustration;
       const simpleFrustration = modeStats.simple.frustration;
       
       const targetMode = simpleFrustration < iconsFrustration ? 'simple' : 'icons';
       const reason = `We switched to ${targetMode === 'icons' ? 'Icons' : 'Simple'} Mode because you asked for help ${currentFrustration} time${currentFrustration > 1 ? 's' : ''}.`;
       
-      console.log(`🔄 Auto-switching from Audio to ${targetMode} due to high frustration (${currentFrustration})`);
       changeMode(targetMode);
       setAutoSwitched(true);
       setSwitchReason(reason);
       setShowSwitchTooltip(true);
       speakText(`Switching to ${targetMode} mode to help you learn better.`);
       
-      // Hide tooltip after 10 seconds, reset auto-switch flag after 30 seconds
       setTimeout(() => setShowSwitchTooltip(false), 10000);
       setTimeout(() => {
         setAutoSwitched(false);
         setSwitchReason(null);
       }, 30000);
     }
-  }, [modeStats, currentMode, autoSwitched]);
+  }, [modeStats, currentMode, autoSwitched, changeMode]);
 
   const recordSuccess = useCallback(() => {
     const now = Date.now();
@@ -640,7 +696,6 @@ export function Learn() {
           responseTime: [...ms[currentMode].responseTime, responseTime]
         }
       };
-      // Derive accuracy from successes/attempts, don't store incrementally
       updated[currentMode].accuracy = updated[currentMode].attempts > 0
         ? (updated[currentMode].successes / updated[currentMode].attempts) * 100
         : 0;
@@ -665,11 +720,11 @@ export function Learn() {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setSelectedAnswer(null);
+      setSelectedAnswers([]);
       setAnswerFeedback(null);
       setModeStart(Date.now());
     } else {
-      // All questions completed
-      speakText('You have completed all questions!');
+      setSessionOver(true);
     }
   }, [currentQuestionIndex, questions.length]);
 
@@ -677,14 +732,12 @@ export function Learn() {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
       setSelectedAnswer(null);
+      setSelectedAnswers([]);
       setAnswerFeedback(null);
       setModeStart(Date.now());
-    } else {
-      speakText('This is the first question');
     }
   }, [currentQuestionIndex]);
 
-  // Handle answer selection
   // Try Me Mode - Add/remove body class
   useEffect(() => {
     if (buddyMode === 'try-me') {
@@ -746,6 +799,7 @@ export function Learn() {
     return explanations[buttonType] || 'This button helps you interact with the learning interface.';
   };
 
+  // Handle answer selection
   const handleAnswerSelection = useCallback((answer: string) => {
     // In Try Me mode, show explanation instead of actual action
     if (buddyMode === 'try-me') {
@@ -758,62 +812,105 @@ export function Learn() {
       alert(explanation);
       return;
     }
-    // Always set the selected answer first so it's visually selected
-    setSelectedAnswer(answer);
-    const isCorrect = currentQuestion.correctAnswers.includes(answer);
+    if (questions.length === 0) return;
     
-    if (isCorrect) {
-      // Increment streak for correct answers
-      setStreak((prev) => prev + 1);
-      recordSuccess();
-      const correctCount = currentQuestion.correctAnswers.length;
-      if (correctCount > 1) {
-        setAnswerFeedback(`✅ Correct! ${correctCount > 1 ? 'This is one of the correct answers!' : 'Great job!'}`);
-        speakText('Correct! This is one of the correct answers!');
+    const currentQuestion = questions[currentQuestionIndex];
+    if (!currentQuestion) return;
+    
+    if (currentQuestion.questionType === 'multipleChoice') {
+      // Always set the selected answer first so it's visually selected
+      setSelectedAnswer(answer);
+      
+      // Support both single correctAnswer and multiple correctAnswers
+      const correctAnswers = currentQuestion.correctAnswers && currentQuestion.correctAnswers.length > 0
+        ? currentQuestion.correctAnswers.map((ca: string) => ca.toUpperCase())
+        : currentQuestion.correctAnswer
+          ? [currentQuestion.correctAnswer.toUpperCase()]
+          : [];
+      
+      const isCorrect = correctAnswers.includes(answer.toUpperCase());
+      
+      if (isCorrect) {
+        recordSuccess();
+        const correctCount = correctAnswers.length;
+        if (correctCount > 1) {
+          setAnswerFeedback(`✅ Correct! ${correctCount > 1 ? 'This is one of the correct answers!' : 'Great job!'}`);
+          speakText('Correct! This is one of the correct answers!');
+        } else {
+          setAnswerFeedback('✅ Correct! Great job!');
+          speakText('Correct! Great job!');
+        }
+        
+        // Keep the answer selected and visible - don't clear it immediately
+        // Move to next question after showing feedback
+        setTimeout(() => {
+          setAnswerFeedback(null);
+          if (currentQuestionIndex < questions.length - 1) {
+            setCurrentQuestionIndex(currentQuestionIndex + 1);
+            setSelectedAnswer(null);
+            setSelectedAnswers([]);
+            setAnswerFeedback(null);
+          } else {
+            setAnswerFeedback('🎉 You completed all questions!');
+            setSessionOver(true);
+          }
+        }, 2000);
       } else {
+        setAttempts((a) => a + 1);
+        setAnswerFeedback(`❌ Not quite. Try again!`);
+        alert('Try again! You can do it!');
+        speakText('Try again! You can do it!');
+        
+        setModeStats((ms) => {
+          const updated = {
+            ...ms,
+            [currentMode]: {
+              ...ms[currentMode],
+              interactions: ms[currentMode].interactions + 1,
+              attempts: ms[currentMode].attempts + 1,
+              responseTime: [...ms[currentMode].responseTime, Date.now() - modeStart]
+            }
+          };
+          updated[currentMode].accuracy = updated[currentMode].attempts > 0
+            ? (updated[currentMode].successes / updated[currentMode].attempts) * 100
+            : 0;
+          return updated;
+        });
+        
+        setTimeout(() => {
+          setSelectedAnswer(null);
+          setAnswerFeedback(null);
+        }, 2000);
+      }
+    } else {
+      const newSelected = selectedAnswers.includes(answer)
+        ? selectedAnswers.filter(a => a !== answer)
+        : [...selectedAnswers, answer];
+      setSelectedAnswers(newSelected);
+      
+      const allCorrectSelected = currentQuestion.correctAnswers.every((ca: string) => newSelected.includes(ca));
+      const noIncorrectSelected = newSelected.every(sel => currentQuestion.correctAnswers.includes(sel));
+      
+      if (allCorrectSelected && noIncorrectSelected && newSelected.length === currentQuestion.correctAnswers.length) {
+        recordSuccess();
         setAnswerFeedback('✅ Correct! Great job!');
         speakText('Correct! Great job!');
-      }
-      
-      // Keep the answer selected and visible - don't clear it immediately
-      // Only clear feedback after 5 seconds, but keep answer highlighted
-      setTimeout(() => {
-        setAnswerFeedback(null);
-      }, 5000);
-      // Keep selectedAnswer visible so user can see their correct choice continuously
-    } else {
-      // Reset streak on incorrect answer
-      setStreak(0);
-      // Wrong answer - alert and encourage to try again
-      setAttempts((a) => a + 1);
-      setAnswerFeedback(`❌ Not quite. Try again!`);
-      alert('Try again! You can do it!');
-      speakText('Try again! You can do it!');
-      
-      // Update mode stats
-      setModeStats((ms) => {
-        const updated = {
-          ...ms,
-          [currentMode]: {
-            ...ms[currentMode],
-            interactions: ms[currentMode].interactions + 1,
-            attempts: ms[currentMode].attempts + 1,
-            responseTime: [...ms[currentMode].responseTime, Date.now() - modeStart]
+        
+        setTimeout(() => {
+          setAnswerFeedback(null);
+          if (currentQuestionIndex < questions.length - 1) {
+            setCurrentQuestionIndex(currentQuestionIndex + 1);
+            setSelectedAnswer(null);
+            setSelectedAnswers([]);
+            setAnswerFeedback(null);
+          } else {
+            setAnswerFeedback('🎉 You completed all questions!');
+            setSessionOver(true);
           }
-        };
-        updated[currentMode].accuracy = updated[currentMode].attempts > 0
-          ? (updated[currentMode].successes / updated[currentMode].attempts) * 100
-          : 0;
-        return updated;
-      });
-      
-      // Clear selected answer after 2 seconds so they can try again
-      setTimeout(() => {
-        setSelectedAnswer(null);
-        setAnswerFeedback(null);
-      }, 2000);
+        }, 2000);
+      }
     }
-  }, [currentMode, modeStart, recordSuccess]);
+  }, [currentQuestionIndex, questions, selectedAnswers, currentMode, modeStart, recordSuccess]);
 
   const showCheckInAfterDelay = useCallback(() => {
     setTimeout(() => {
@@ -828,31 +925,20 @@ export function Learn() {
   }, [currentMode]);
 
   const endSession = useCallback(async () => {
-    // Prevent duplicate saves using ref (immediate check, no state delay)
     if (saveInProgressRef.current || savingReport || reportSaved || sessionOver) {
-      console.log('Session already ended or saving in progress', { 
-        saveInProgress: saveInProgressRef.current,
-        savingReport, 
-        reportSaved, 
-        sessionOver 
-      });
       return;
     }
 
-    // Mark as in progress immediately using ref
     saveInProgressRef.current = true;
     const now = Date.now();
     
-    // Mark as saving immediately to prevent duplicate calls
     setSavingReport(true);
     setSessionOver(true);
     
-    // Capture current values before state update
     const currentAttempts = attempts;
     const currentSuccesses = successes;
     const currentHelpCount = helpCount;
     
-    // Get current stats first
     let finalStats: Record<LearningMode, ModeStats>;
     let profile: { 
       bestModes: string; 
@@ -867,7 +953,6 @@ export function Learn() {
       };
     };
     
-    // Update stats and compute final values
     setModeStats((currentStats) => {
       const updatedStats = { ...currentStats };
       updatedStats[currentMode] = {
@@ -875,7 +960,6 @@ export function Learn() {
         time: updatedStats[currentMode].time + (now - modeStart)
       };
       
-      // Generate profile with updated stats
       const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
       const sortedByInteractions = [...modes].sort((a, b) => 
         updatedStats[b].interactions - updatedStats[a].interactions
@@ -895,17 +979,14 @@ export function Learn() {
         avgResponseTime(a) - avgResponseTime(b)
       );
 
-      // Assign to outer variables
       finalStats = updatedStats;
       
-      // Generate explanations for why student struggles in certain modes
       const leastEffectiveMode = sortedByFrustration[sortedByFrustration.length - 1];
       const leastEffectiveStats = updatedStats[leastEffectiveMode];
       const frustrationReason = leastEffectiveStats.frustration > 0
         ? `Student showed frustration ${leastEffectiveStats.frustration} time${leastEffectiveStats.frustration > 1 ? 's' : ''} in ${leastEffectiveMode} mode with ${leastEffectiveStats.accuracy.toFixed(1)}% accuracy, suggesting this modality doesn't align with their learning style.`
         : `Student had low engagement in ${leastEffectiveMode} mode with minimal interactions, indicating this modality may not be effective for their learning preferences.`;
       
-      // Generate recommendation explanations
       const bestMode = sortedByInteractions[0];
       const bestModeStats = updatedStats[bestMode];
       const recommendationReason = `Recommended ${bestMode} mode because student showed high engagement (${bestModeStats.interactions} interactions), ${bestModeStats.accuracy.toFixed(1)}% accuracy, and low frustration (${bestModeStats.frustration} help requests) in this mode.`;
@@ -938,8 +1019,6 @@ export function Learn() {
       return updatedStats;
     });
     
-    // Save to Firebase AFTER state update, outside of setModeStats
-    // Use setTimeout to ensure state update completes first
     setTimeout(async () => {
       if (currentUser && finalStats && profile) {
         try {
@@ -976,38 +1055,27 @@ export function Learn() {
     totalHelpRequests: number
   ) => {
     if (!currentUser) {
-      console.warn('Cannot save report: user not authenticated');
       setSavingReport(false);
-          return;
-        }
-    
-    // Prevent duplicate saves - double check
-    if (reportSaved) {
-      console.log('Report already saved, skipping duplicate save');
       return;
     }
     
-    console.log('Saving report to Firebase...', { totalAttempts, totalSuccesses, totalHelpRequests });
+    if (reportSaved) {
+      return;
+    }
     
     try {
-      // Calculate session duration (approximate)
       const totalTime = Object.values(stats).reduce((sum, s) => sum + s.time, 0);
       
-      // Prepare report data
       const reportData = {
         userId: currentUser.uid,
         userEmail: currentUser.email || '',
         timestamp: serverTimestamp(),
         sessionDate: new Date().toISOString(),
         sessionDuration: totalTime,
-        
-        // Overall session metrics
         totalAttempts: totalAttempts,
         totalSuccesses: totalSuccesses,
         totalHelpRequests: totalHelpRequests,
         successRate: totalAttempts > 0 ? (totalSuccesses / totalAttempts) * 100 : 0,
-        
-        // Detailed mode statistics
         modeStats: {
           audio: {
             timeSpent: stats.audio.time,
@@ -1065,8 +1133,6 @@ export function Learn() {
             successes: stats.simple.successes
           }
         },
-        
-        // Generated profile summary
         profile: {
           bestModes: profile.bestModes,
           leastEffective: profile.leastEffective,
@@ -1081,63 +1147,38 @@ export function Learn() {
         }
       };
       
-      // Save to Firestore in user-specific subcollection
-      console.log('Attempting to save report to Firebase...', { 
-        userId: currentUser.uid, 
-        collection: `users/${currentUser.uid}/learningReports`,
-        dataSize: JSON.stringify(reportData).length 
-      });
-      
-      // Save to user-specific subcollection: users/{userId}/learningReports/{reportId}
-      // Check one more time to prevent duplicate saves
-      if (reportSaved) {
-        console.log('Report already marked as saved, skipping duplicate save');
-        setSavingReport(false);
-        return;
-      }
-      
-      const docRef = await addDoc(
+      await addDoc(
         collection(db, 'users', currentUser.uid, 'learningReports'), 
         reportData
       );
       
-      // Update persistent learning profile
       await updatePersistentProfile(stats, profile, totalAttempts, totalSuccesses);
       
       setReportSaved(true);
       setSavingReport(false);
-      saveInProgressRef.current = false; // Reset ref after successful save
-      console.log('Learning report saved successfully to Firebase with ID:', docRef.id);
+      saveInProgressRef.current = false;
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorCode = (error as any)?.code || 'unknown';
       
-      console.error('Error saving learning report to Firebase:', {
-        error,
-        message: errorMessage,
-        code: errorCode,
-        userId: currentUser?.uid,
-        userEmail: currentUser?.email
-      });
-      
-      // More specific error messages
       let userMessage = 'Failed to save report to Firebase. ';
       if (errorCode === 'permission-denied') {
         userMessage += 'Permission denied. Please check Firestore security rules.';
       } else if (errorCode === 'unavailable') {
         userMessage += 'Firebase is unavailable. Please check your internet connection.';
-            } else {
+      } else {
         userMessage += `Error: ${errorMessage}`;
       }
       
       alert(userMessage);
-      saveInProgressRef.current = false; // Reset ref on error
+      saveInProgressRef.current = false;
     } finally {
       setSavingReport(false);
-            }
-          };
+    }
+  };
 
-  // Update persistent learning profile with trends over time
+  // Update persistent learning profile
   const updatePersistentProfile = async (
     stats: Record<LearningMode, ModeStats>,
     sessionProfile: { bestModes: string; leastEffective: string; strengths: string; needs: string; recommended: string },
@@ -1154,7 +1195,6 @@ export function Learn() {
       const totalTime = Object.values(stats).reduce((sum, s) => sum + s.time, 0);
       const sessionAccuracy = totalAttempts > 0 ? (totalSuccesses / totalAttempts) * 100 : 0;
       
-      // Calculate learning style trends
       const visualModes = ['image', 'icons'];
       const auditoryModes = ['audio'];
       const kinestheticModes = ['gesture'];
@@ -1172,22 +1212,18 @@ export function Learn() {
         learningStyle = 'kinesthetic';
       }
       
-      // Check if gesture mode is used frequently (gesture reinforcement)
       const gestureUsagePercent = totalTime > 0 ? (stats.gesture.time / totalTime) * 100 : 0;
       const hasGestureReinforcement = gestureUsagePercent > 20;
       
       if (existingProfile.exists()) {
-        // Update existing profile with rolling averages
         const existingData = existingProfile.data();
         const totalSessions = (existingData.totalSessions || 0) + 1;
         const previousAvgAccuracy = existingData.averageAccuracy || 0;
         const previousAvgDifficulty = existingData.averageDifficulty || 1;
         
-        // Calculate rolling average (weighted toward recent sessions)
         const newAvgAccuracy = (previousAvgAccuracy * 0.7) + (sessionAccuracy * 0.3);
         const newAvgDifficulty = (previousAvgDifficulty * 0.7) + (difficulty * 0.3);
         
-        // Update mode preferences
         const modePreferences = existingData.modePreferences || {};
         modes.forEach(mode => {
           const modeTimePercent = totalTime > 0 ? (stats[mode].time / totalTime) * 100 : 0;
@@ -1198,15 +1234,13 @@ export function Learn() {
           }
         });
         
-        // Detect trend in learning style
         const previousLearningStyle = existingData.learningStyle || 'mixed';
         const learningStyleHistory = existingData.learningStyleHistory || [previousLearningStyle];
         learningStyleHistory.push(learningStyle);
         if (learningStyleHistory.length > 10) {
-          learningStyleHistory.shift(); // Keep only last 10 sessions
+          learningStyleHistory.shift();
         }
         
-        // Determine dominant learning style from history
         const styleCounts: Record<string, number> = {};
         learningStyleHistory.forEach((style: string) => {
           styleCounts[style] = (styleCounts[style] || 0) + 1;
@@ -1229,14 +1263,12 @@ export function Learn() {
           hasGestureReinforcement: hasGestureReinforcement || existingData.hasGestureReinforcement,
           profileSummary: `${dominantStyle} learner${hasGestureReinforcement ? ' with gesture reinforcement' : ''}`,
           lastProfile: sessionProfile,
-          // Trend detection
           trendAccuracy: sessionAccuracy > previousAvgAccuracy ? 'improving' : 
                         sessionAccuracy < previousAvgAccuracy ? 'declining' : 'stable',
           trendDifficulty: difficulty > previousAvgDifficulty ? 'increasing' : 
                           difficulty < previousAvgDifficulty ? 'decreasing' : 'stable'
         }, { merge: true });
       } else {
-        // Create new profile
         const modePreferences: Record<string, number> = {};
         modes.forEach(mode => {
           modePreferences[mode] = totalTime > 0 ? (stats[mode].time / totalTime) * 100 : 0;
@@ -1263,10 +1295,8 @@ export function Learn() {
         });
       }
       
-      console.log('Persistent learning profile updated successfully');
     } catch (error) {
       console.error('Error updating persistent learning profile:', error);
-      // Don't fail the report save if profile update fails
     }
   };
 
@@ -1280,45 +1310,43 @@ export function Learn() {
         setErrorMessage('');
         
         const video = webcamRef.current?.video;
-      const canvas = canvasRef.current;
-      const overlayCanvas = overlayCanvasRef.current;
-          
+        const canvas = canvasRef.current;
+        const overlayCanvas = overlayCanvasRef.current;
+        
         if (!video || !canvas || !overlayCanvas) {
           if (mounted) setMpStatus('error');
           return;
         }
         
         // Set overlay canvas size to match video
-        function updateCanvasSize() {
+        const updateCanvasSize = () => {
           if (video && overlayCanvas && mounted) {
             const width = video.videoWidth || 640;
             const height = video.videoHeight || 480;
             overlayCanvas.width = width;
             overlayCanvas.height = height;
           }
-        }
+        };
         
         // Update canvas size when video metadata loads
         video.addEventListener('loadedmetadata', updateCanvasSize);
         updateCanvasSize(); // Initial size
 
-        // Initialize MediaPipe Hands
         const hands = new Hands({
           locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
           }
         });
 
-          hands.setOptions({
-            maxNumHands: 2, // Crucial for two-handed gestures
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5, // Lower threshold for better two-hand detection
-            minTrackingConfidence: 0.5 // Lower threshold for more stable tracking
-          });
+        hands.setOptions({
+          maxNumHands: 2, // Crucial for two-handed gestures
+          modelComplexity: 1,
+          minDetectionConfidence: 0.5, // Lower threshold for better two-hand detection
+          minTrackingConfidence: 0.5 // Lower threshold for more stable tracking
+        });
 
-        // Set up drawing on canvas
-      const ctx = canvas.getContext('2d');
-      const overlayCtx = overlayCanvas.getContext('2d');
+        const ctx = canvas.getContext('2d');
+        const overlayCtx = overlayCanvas.getContext('2d');
         if (!ctx || !overlayCtx) {
           if (mounted) setMpStatus('error');
           return;
@@ -1329,19 +1357,16 @@ export function Learn() {
         let gestureDetectedTime = 0;
         let stableGestureCount = 0;
         let lastGestureType: GestureType = '-';
-        // Improved thresholds for better detection
-        const STABLE_THRESHOLD = 600; // Reduced for faster response
-        const CONFIRMATION_THRESHOLD = 75; // Increased for more reliable detection
-        const COOLDOWN_DURATION = 2000; // Reduced cooldown for better responsiveness
-        const MIN_STABLE_FRAMES = 4; // Slightly reduced for smoother experience
+        const STABLE_THRESHOLD = 600;
+        const CONFIRMATION_THRESHOLD = 75;
+        const COOLDOWN_DURATION = 2000;
+        const MIN_STABLE_FRAMES = 4;
         
-        // Add gesture history buffer for smoothing
         const gestureHistory: Array<{ gesture: GestureType; confidence: number; time: number }> = [];
         const HISTORY_SIZE = 5;
 
         hands.onResults((results) => {
           if (!mounted || !gestureDetectionEnabled) {
-            // If detection disabled, just show the video without processing
             ctx.save();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (results.image) {
@@ -1353,21 +1378,25 @@ export function Learn() {
             return;
           }
           
-          // Clear canvas
           ctx.save();
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
           ctx.restore();
 
+          // Clear overlay canvas
+          overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
           const now = Date.now();
           const timeSinceLastAction = now - lastActionTime;
 
-          // Clear overlay canvas
-          overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-          
           if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             const allLandmarks = results.multiHandLandmarks;
-            console.log("Hands detected:", allLandmarks.length);
+            
+            // Debug: Log number of hands detected
+            console.log(`👋 Hands detected: ${allLandmarks.length}`, {
+              timestamp: new Date().toISOString(),
+              handCount: allLandmarks.length
+            });
             
             // Draw hand landmarks on overlay canvas (semi-transparent ghost hand)
             for (let handIdx = 0; handIdx < allLandmarks.length; handIdx++) {
@@ -1379,12 +1408,12 @@ export function Learn() {
               const detectingColor = '#3b82f6';
               
               // Set overlay canvas styles with transparency
-              overlayCtx.globalAlpha = 0.7;
-              overlayCtx.strokeStyle = currentGestureState === 'CONFIRMED' ? confirmedColor :
+              overlayCtx.globalAlpha = 0.7; // Semi-transparent
+              overlayCtx.strokeStyle = currentGestureState === 'CONFIRMED' ? confirmedColor : 
                                        currentGestureState === 'DETECTING' ? detectingColor : baseColor;
               overlayCtx.fillStyle = currentGestureState === 'CONFIRMED' ? confirmedColor : baseColor;
               overlayCtx.lineWidth = currentGestureState === 'CONFIRMED' ? 3 : 2;
-              
+
               // Draw landmarks (larger for visibility)
               for (const landmark of landmarks) {
                 const x = landmark.x * overlayCanvas.width;
@@ -1393,17 +1422,18 @@ export function Learn() {
                 overlayCtx.arc(x, y, 6, 0, 2 * Math.PI);
                 overlayCtx.fill();
               }
-              
+
               // Connect landmarks with lines (hand skeleton)
               const connections = [
-                [0, 1, 2, 3, 4], // Thumb
-                [0, 5, 6, 7, 8], // Index
-                [0, 9, 10, 11, 12], // Middle
-                [0, 13, 14, 15, 16], // Ring
-                [0, 17, 18, 19, 20] // Pinky
+                [0, 1, 2, 3, 4],
+                [0, 5, 6, 7, 8],
+                [0, 9, 10, 11, 12],
+                [0, 13, 14, 15, 16],
+                [0, 17, 18, 19, 20]
               ];
-              
-              overlayCtx.globalAlpha = 0.6;
+
+              overlayCtx.strokeStyle = currentGestureState === 'CONFIRMED' ? confirmedColor : baseColor;
+              overlayCtx.globalAlpha = 0.6; // Slightly more transparent for lines
               for (const connection of connections) {
                 overlayCtx.beginPath();
                 for (let i = 0; i < connection.length; i++) {
@@ -1416,13 +1446,12 @@ export function Learn() {
                 }
                 overlayCtx.stroke();
               }
-              overlayCtx.globalAlpha = 1.0;
+              overlayCtx.globalAlpha = 0.7; // Reset for next hand
             }
             
             // Also draw on main canvas for compatibility
             for (let handIdx = 0; handIdx < allLandmarks.length; handIdx++) {
               const landmarks = allLandmarks[handIdx];
-              
               const color = handIdx === 0 ? '#22c55e' : '#f59e0b';
               ctx.strokeStyle = currentGestureState === 'CONFIRMED' ? '#10b981' : 
                                currentGestureState === 'DETECTING' ? '#3b82f6' : color;
@@ -1438,8 +1467,11 @@ export function Learn() {
               }
 
               const connections = [
-                [0, 1, 2, 3, 4], [0, 5, 6, 7, 8], [0, 9, 10, 11, 12],
-                [0, 13, 14, 15, 16], [0, 17, 18, 19, 20]
+                [0, 1, 2, 3, 4],
+                [0, 5, 6, 7, 8],
+                [0, 9, 10, 11, 12],
+                [0, 13, 14, 15, 16],
+                [0, 17, 18, 19, 20]
               ];
 
               ctx.strokeStyle = currentGestureState === 'CONFIRMED' ? '#10b981' : color;
@@ -1457,16 +1489,13 @@ export function Learn() {
               }
             }
 
-            // Classify gesture from all landmarks (handles two hands for thumbs down)
             const { gesture: classification, confidence } = classifyGestureFromLandmarks(allLandmarks);
             
-            // Add to gesture history for smoothing
             gestureHistory.push({ gesture: classification, confidence, time: now });
             if (gestureHistory.length > HISTORY_SIZE) {
               gestureHistory.shift();
             }
             
-            // Use smoothed gesture (mode of recent gestures with confidence weighting)
             const smoothed = getSmoothedGesture(gestureHistory);
             const finalClassification = smoothed.gesture;
             const finalConfidence = smoothed.confidence;
@@ -1475,8 +1504,6 @@ export function Learn() {
             setGesture(finalClassification);
             setGestureConfidence(finalConfidence);
 
-
-            // Gesture State Machine (use smoothed gesture)
             if (finalClassification !== '-' && finalConfidence >= CONFIRMATION_THRESHOLD) {
               if (currentGestureState === 'IDLE') {
                 if (timeSinceLastAction > COOLDOWN_DURATION) {
@@ -1487,13 +1514,11 @@ export function Learn() {
                   setGestureState('DETECTING');
                 }
               } else if (currentGestureState === 'DETECTING') {
-                // Only count as stable if gesture matches (with smoothing, should be more stable)
                 if (finalClassification === lastGestureType) {
                   stableGestureCount++;
                 } else {
-                  // Gesture changed, reset but allow quick transition for high confidence
                   if (finalConfidence >= 85) {
-                    stableGestureCount = MIN_STABLE_FRAMES - 1; // Allow faster confirmation
+                    stableGestureCount = MIN_STABLE_FRAMES - 1;
                   } else {
                     stableGestureCount = 1;
                   }
@@ -1508,7 +1533,6 @@ export function Learn() {
                   setLastConfirmedGesture(finalClassification);
 
                   const actions: Partial<Record<GestureType, () => void>> = {
-                    // Answer selection gestures (1-4 fingers = A, B, C, D)
                     '1': () => {
                       handleAnswerSelection('A');
                     },
@@ -1521,7 +1545,6 @@ export function Learn() {
                     '4': () => {
                       handleAnswerSelection('D');
                     },
-                    // Navigation and feedback gestures
                     thumbsUp: () => {
                       recordSuccess();
                       setAnswerFeedback('Great! You understand this.');
@@ -1552,11 +1575,8 @@ export function Learn() {
                     }, COOLDOWN_DURATION);
                   }
                 }
-              } else if (currentGestureState === 'COOLDOWN') {
-                // Ignore during cooldown
-        }
-      } else {
-              // Gesture lost or confidence too low
+              }
+            } else {
               if (currentGestureState === 'DETECTING' && (now - gestureDetectedTime) > 500) {
                 currentGestureState = 'IDLE';
                 setGestureState('IDLE');
@@ -1565,9 +1585,8 @@ export function Learn() {
               }
             }
           } else {
-            // No hand detected
             setDetectStatus('ready');
-        setGesture('-');
+            setGesture('-');
             setGestureConfidence(0);
             
             if (currentGestureState === 'DETECTING' && (now - gestureDetectedTime) > 500) {
@@ -1582,7 +1601,6 @@ export function Learn() {
 
         handsRef.current = hands;
 
-        // Initialize camera
         const camera = new Camera(video, {
           onFrame: async () => {
             if (handsRef.current) {
@@ -1617,12 +1635,6 @@ export function Learn() {
 
     return () => {
       mounted = false;
-      const video = webcamRef.current?.video;
-      if (video) {
-        // Remove event listener - we need to use the same function reference
-        // Since updateCanvasSize is defined inside initializeMediaPipe, we'll use a different approach
-        // The event listener will be automatically cleaned up when the video element is removed
-      }
       if (handsRef.current) {
         handsRef.current.close();
         handsRef.current = null;
@@ -1632,37 +1644,33 @@ export function Learn() {
         cameraRef.current = null;
       }
     };
-  }, [mediaReady, currentMode, content, recordHelp, changeMode, nextItem, recordSuccess]);
+  }, [mediaReady, currentMode, recordHelp, changeMode, nextItem, recordSuccess, handleAnswerSelection]);
 
-
-  // Active adaptation: auto-switch modes based on frustration
+  // Active adaptation
   useEffect(() => {
     const currentFrustration = modeStats[currentMode].frustration;
     const currentAccuracy = modeStats[currentMode].accuracy;
     
-    // If frustration is high (>= 3) and accuracy is low (< 50%), suggest switching
     if (currentFrustration >= 3 && currentAccuracy < 50 && modeStats[currentMode].attempts >= 3) {
       const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
       const bestAlternative = modes
         .filter(m => m !== currentMode)
         .sort((a, b) => {
-          // Prefer modes with lower frustration and higher accuracy
           const frustrationDiff = modeStats[a].frustration - modeStats[b].frustration;
           if (frustrationDiff !== 0) return frustrationDiff;
           return modeStats[b].accuracy - modeStats[a].accuracy;
         })[0];
       
       if (bestAlternative) {
-        // Auto-switch after a short delay
         setTimeout(() => {
           changeMode(bestAlternative);
           speakText(`Switching to ${bestAlternative} mode. This might work better for you!`);
         }, 2000);
       }
     }
-  }, [modeStats, currentMode, changeMode, speakText]);
+  }, [modeStats, currentMode, changeMode]);
 
-  // Calculate progress percentage
+  // Calculate progress
   const progress = attempts > 0 ? (successes / attempts) * 100 : 0;
   
   // Generate learning profile
@@ -1696,8 +1704,6 @@ export function Learn() {
   };
 
   const profile = sessionOver ? generateProfile() : null;
-
-  // Audio confirmation messages for gestures
   const gestureMessages: Partial<Record<GestureType, string>> = {
     '1': '1 finger detected. Answer A selected.',
     '2': '2 fingers detected. Answer B selected.',
@@ -1708,6 +1714,59 @@ export function Learn() {
     '-': ''
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column'
+      }}>
+        <h2>Loading Practice Session...</h2>
+        <div style={{ 
+          width: '40px', 
+          height: '40px', 
+          border: '4px solid #f3f3f3', 
+          borderTop: '4px solid #667eea', 
+          borderRadius: '50%', 
+          animation: 'spin 1s linear infinite',
+          marginTop: '20px'
+        }}></div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // Error if no questions
+  if (questions.length === 0) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column'
+      }}>
+        <h2>No Questions Available</h2>
+        <p>This assignment doesn't have any questions yet.</p>
+        <button onClick={() => navigate('/home')} className="logout-button">
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  const currentQuestion = questions[currentQuestionIndex];
+  const content = currentQuestion?.text || '';
+
+  // Return the UI (same as your Learn component but with dynamic questions)
   return (
     <motion.div 
       className="learn-container" 
@@ -1832,10 +1891,7 @@ export function Learn() {
         </motion.div>
       )}
 
-      <main id="main-content" className="learn-main" role="main" style={{
-        backgroundColor: theme.background,
-        transition: 'background-color 0.5s ease'
-      }}>
+      <main id="main-content" className="learn-main" role="main">
         {mpStatus === 'error' && (
           <motion.div 
             className="error-message"
@@ -1852,12 +1908,8 @@ export function Learn() {
         
         <div className="learn-panes">
           {/* Left Pane: Gesture & Interaction */}
-          <motion.div className="learn-pane gesture-pane" variants={cardVariants} style={{
-            backgroundColor: theme.accent,
-            borderColor: theme.border,
-            transition: 'background-color 0.5s ease, border-color 0.5s ease'
-          }}>
-            <h2 style={{ color: theme.text }}>👋 Gesture & Interaction</h2>
+          <motion.div className="learn-pane gesture-pane" variants={cardVariants}>
+            <h2>👋 Gesture & Interaction</h2>
             
             {mpStatus === 'loading' && (
               <div className="loading-message">
@@ -1868,9 +1920,8 @@ export function Learn() {
               </div>
             )}
             
-            {currentMode !== 'gesture' && (
             <div className="webcam-section">
-              <div className="webcam-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
+              <div className="webcam-wrapper">
                 <Webcam
                   ref={webcamRef}
                   audio={false}
@@ -1892,15 +1943,6 @@ export function Learn() {
                 <canvas 
                   ref={overlayCanvasRef} 
                   className="ghost-hand-overlay"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    pointerEvents: 'none',
-                    borderRadius: '12px'
-                  }}
                 />
               </div>
               <canvas 
@@ -1968,7 +2010,6 @@ export function Learn() {
                 </div>
               )}
             </div>
-            )}
 
             <div className="gesture-info">
               <div className="gesture-display">
@@ -2019,11 +2060,6 @@ export function Learn() {
                     <span>{Math.round(gestureConfidence)}% confidence</span>
                   </div>
                 )}
-                {gestureState === 'CONFIRMED' && (
-                  <div className="confirmed-indicator" role="status" aria-live="polite">
-                    ✓ Gesture confirmed
-                  </div>
-                )}
               </div>
 
               <div className="gesture-guide">
@@ -2038,7 +2074,7 @@ export function Learn() {
                     <span>2 Fingers = Answer B</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon"><img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                    <span className="guide-icon"><img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px' }} /></span>
                     <span>3 Fingers = Answer C</span>
                   </div>
                   <div className="guide-item">
@@ -2071,6 +2107,10 @@ export function Learn() {
                     <span className="stat-label">Help Requests:</span>
                     <span className="stat-value">{helpCount}</span>
                   </div>
+                  <div className="stat">
+                    <span className="stat-label">Question:</span>
+                    <span className="stat-value">{currentQuestionIndex + 1}/{questions.length}</span>
+                  </div>
                 </div>
                 <div className="progress-bar">
                   <div 
@@ -2087,7 +2127,6 @@ export function Learn() {
           <motion.div className="learn-pane learning-pane" variants={cardVariants}>
             <h2>📖 Adaptive Learning Content</h2>
             
-            {/* Switch reason tooltip */}
             {showSwitchTooltip && switchReason && (
               <motion.div
                 className="switch-tooltip"
@@ -2105,14 +2144,14 @@ export function Learn() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--spacing-sm)' }}>
-              <div>
+                  <div>
                     <strong style={{ fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 1.1)' }}>
                       💡 Why am I seeing this?
                     </strong>
                     <p style={{ margin: 'var(--spacing-xs) 0 0 0', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))' }}>
                       {switchReason}
                     </p>
-              </div>
+                  </div>
                   <button
                     onClick={() => setShowSwitchTooltip(false)}
                     style={{
@@ -2129,8 +2168,8 @@ export function Learn() {
                   >
                     ✕
                   </button>
-            </div>
-          </motion.div>
+                </div>
+              </motion.div>
             )}
             
             <div className="mode-selector">
@@ -2165,7 +2204,7 @@ export function Learn() {
                 >
                   📝 Simple
                 </button>
-            </div>
+              </div>
             </div>
 
             <div className="content-display">
@@ -2177,27 +2216,51 @@ export function Learn() {
                   {currentMode === 'gesture' && '👋 Gesture Mode'}
                   {currentMode === 'simple' && '📝 Simple Mode'}
                 </span>
+                <span className="mode-indicator-badge" style={{ marginLeft: 'var(--spacing-sm)' }}>
+                  Question {currentQuestionIndex + 1} of {questions.length}
+                </span>
               </div>
               
-            {currentMode === 'audio' && (
+              {currentMode === 'audio' && (
                 <motion.div 
                   className="mode-content"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
+                  key={currentQuestionIndex}
                 >
                   <div className="audio-mode">
                     <div className="mode-icon-large">🔊</div>
                     <div className="content-card">
+                      {currentQuestion?.imageData && (
+                        <img 
+                          src={currentQuestion.imageData} 
+                          alt="Question" 
+                          style={{ 
+                            maxWidth: '100%', 
+                            maxHeight: '300px', 
+                            marginBottom: 'var(--spacing-md)',
+                            borderRadius: 'var(--border-radius)',
+                            objectFit: 'contain'
+                          }} 
+                        />
+                      )}
                       <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
-                        {currentQuestion.text}
+                        {currentQuestion?.text || 'No question available'}
                       </p>
                       <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans) => {
-                          const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
+                        {(currentQuestion?.answers || []).map((ans: any) => {
+                          // Support both single correctAnswer and multiple correctAnswers
+                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
+                            : currentQuestion?.correctAnswer
+                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
+                              : [];
+                          
+                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
                           const isSelected = selectedAnswer === ans.letter;
                           // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers, show all correct answers in green only when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          // For multiple correct answers: show all correct answers in green when a correct one is selected
+                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
                           
                           return (
@@ -2225,9 +2288,9 @@ export function Learn() {
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
                           {answerFeedback}
-              </div>
-            )}
-              </div>
+                        </div>
+                      )}
+                    </div>
                     <button 
                       className="play-button"
                       onClick={() => speakText(content)}
@@ -2245,30 +2308,54 @@ export function Learn() {
                 </motion.div>
               )}
 
-            {currentMode === 'image' && (
+              {currentMode === 'image' && (
                 <motion.div 
                   className="mode-content"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
+                  key={currentQuestionIndex}
                 >
                   <div className="image-mode">
-                    <div className="visual-explanation">
-                      <div className="visual-icons" style={{ fontSize: '2rem' }}>
-                        🎁 → 👥 → 📊
-              </div>
-                      <p className="visual-caption">Stickers Sharing Visual</p>
-                    </div>
+                    {currentQuestion?.imageData ? (
+                      <div className="visual-explanation">
+                        <img 
+                          src={currentQuestion.imageData} 
+                          alt="Question" 
+                          style={{ 
+                            maxWidth: '100%', 
+                            maxHeight: '400px', 
+                            borderRadius: 'var(--border-radius)',
+                            objectFit: 'contain',
+                            marginBottom: 'var(--spacing-sm)'
+                          }} 
+                        />
+                      </div>
+                    ) : (
+                      <div className="visual-explanation">
+                        <div className="visual-icons" style={{ fontSize: '2rem' }}>
+                          🎁 → 👥 → 📊
+                        </div>
+                        <p className="visual-caption">Visual Representation</p>
+                      </div>
+                    )}
                     <div className="content-card">
                       <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
-                        {currentQuestion.text}
+                        {currentQuestion?.text || 'No question available'}
                       </p>
                       <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans) => {
-                          const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
+                        {(currentQuestion?.answers || []).map((ans: any) => {
+                          // Support both single correctAnswer and multiple correctAnswers
+                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
+                            : currentQuestion?.correctAnswer
+                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
+                              : [];
+                          
+                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
                           const isSelected = selectedAnswer === ans.letter;
                           // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers, show all correct answers in green only when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          // For multiple correct answers: show all correct answers in green when a correct one is selected
+                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
                           
                           return (
@@ -2296,56 +2383,57 @@ export function Learn() {
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
                           {answerFeedback}
-              </div>
-            )}
+                        </div>
+                      )}
                     </div>
                     <div className="mode-info-card">
                       <p className="mode-description">
-                        💡 <strong>Tip:</strong> Visualize the problem! 12 stickers ÷ 3 students = ?
+                        💡 <strong>Tip:</strong> Visualize the problem to help understand it better.
                       </p>
                     </div>
                   </div>
                 </motion.div>
               )}
 
-            {currentMode === 'icons' && (
+              {currentMode === 'icons' && (
                 <motion.div 
                   className="mode-content"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
+                  key={currentQuestionIndex}
                 >
                   <div className="icons-mode">
-                    {streak > 0 && (
-                      <div className="streak-indicator" style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        padding: '0.75rem 1.5rem',
-                        backgroundColor: streak >= 3 ? '#FF6B35' : '#FFA726',
-                        borderRadius: '20px',
-                        color: '#FFFFFF',
-                        fontWeight: 700,
-                        fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-                        boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
-                        marginBottom: 'var(--spacing-md)',
-                        animation: streak >= 3 ? 'pulse 1s ease-in-out infinite' : 'none'
-                      }}>
-                        {streak >= 3 ? '🔥' : '⭐'} {streak} {streak === 1 ? 'Streak' : 'Streak'}!
-                      </div>
-                    )}
-                    <div className="content-card" style={{
-                      backgroundColor: theme.secondary,
-                      borderColor: theme.border,
-                      transition: 'background-color 0.5s ease, border-color 0.5s ease'
-                    }}>
-                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, color: theme.text }}>
-                        {currentQuestion.text}
+                    <div className="content-card">
+                      {currentQuestion?.imageData && (
+                        <img 
+                          src={currentQuestion.imageData} 
+                          alt="Question" 
+                          style={{ 
+                            maxWidth: '100%', 
+                            maxHeight: '300px', 
+                            marginBottom: 'var(--spacing-md)',
+                            borderRadius: 'var(--border-radius)',
+                            objectFit: 'contain'
+                          }} 
+                        />
+                      )}
+                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
+                        {currentQuestion?.text || 'No question available'}
                       </p>
                       <div className="answer-choices" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans) => {
-                          const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
+                        {(currentQuestion?.answers || []).map((ans: any) => {
+                          // Support both single correctAnswer and multiple correctAnswers
+                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
+                            : currentQuestion?.correctAnswer
+                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
+                              : [];
+                          
+                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
                           const isSelected = selectedAnswer === ans.letter;
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          // Show green only if this specific answer is selected AND it's correct
+                          // For multiple correct answers: show all correct answers in green when a correct one is selected
+                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
                           
                           return (
@@ -2368,145 +2456,72 @@ export function Learn() {
                             }}
                           >
                             <span className="icon-emoji" style={{ fontSize: '2rem' }}>
-                              {ans.letter === 'A' ? (
-                                <img src="https://api.arasaac.org/api/pictograms/1?download=false" alt="One" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} onError={(e) => { e.currentTarget.src = 'https://sclera.be/resources/pictos/sclera/1.png'; }} />
-                              ) : ans.letter === 'B' ? (
-                                <img src="https://api.arasaac.org/api/pictograms/2?download=false" alt="Two" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} onError={(e) => { e.currentTarget.src = 'https://sclera.be/resources/pictos/sclera/2.png'; }} />
-                              ) : ans.letter === 'C' ? (
-                                <img src={threeFingersIcon} alt="Three fingers" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} />
-                              ) : (
-                                <img src="https://api.arasaac.org/api/pictograms/4?download=false" alt="Four" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} onError={(e) => { e.currentTarget.src = 'https://sclera.be/resources/pictos/sclera/4.png'; }} />
-                              )}
+                              {ans.letter === 'A' ? '1️⃣' : ans.letter === 'B' ? '2️⃣' : ans.letter === 'C' ? <img src={threeFingersIcon} alt="3 fingers" style={{ width: '20px', height: '20px', display: 'inline-block', verticalAlign: 'middle' }} /> : '4️⃣'}
                             </span>
                             <span className="icon-text"><strong>{ans.letter})</strong> {ans.value}</span>
                           </motion.button>
                           );
                         })}
-                </div>
+                      </div>
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
                           {answerFeedback}
-              </div>
-
-            )}
+                        </div>
+                      )}
                     </div>
                     <div className="mode-info-card">
                       <p className="mode-description">
                         💡 <strong>Tip:</strong> Click answer choices or use gestures: 1 finger = A, 2 = B, 3 = C, 4 = D
                       </p>
-              </div>
-              </div>
+                    </div>
+                  </div>
                 </motion.div>
-            )}
+              )}
 
-            {currentMode === 'gesture' && (
+              {currentMode === 'gesture' && (
                 <motion.div 
                   className="mode-content"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
+                  key={currentQuestionIndex}
                 >
                   <div className="gesture-mode">
-                    {streak > 0 && (
-                      <div className="streak-indicator" style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        padding: '0.75rem 1.5rem',
-                        backgroundColor: streak >= 3 ? '#FF6B35' : '#FFA726',
-                        borderRadius: '20px',
-                        color: '#FFFFFF',
-                        fontWeight: 700,
-                        fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-                        boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
-                        marginBottom: 'var(--spacing-md)',
-                        animation: streak >= 3 ? 'pulse 1s ease-in-out infinite' : 'none',
-                        order: -2
-                      }}>
-                        {streak >= 3 ? '🔥' : '⭐'} {streak} {streak === 1 ? 'Streak' : 'Streak'}!
-                      </div>
-                    )}
-                    {/* Webcam moved to center-top */}
-                    <div className="webcam-section gesture-mode-webcam" style={{ 
-                      width: '100%', 
-                      display: 'flex', 
-                      justifyContent: 'center', 
-                      marginBottom: 'var(--spacing-lg)',
-                      order: -1
-                    }}>
-                      <div className="webcam-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
-                        <Webcam
-                          ref={webcamRef}
-                          audio={false}
-                          onUserMedia={() => setMediaReady(true)}
-                        onUserMediaError={(error) => {
-                          console.error('Webcam error:', error);
-                          const err = error instanceof DOMException ? error : null;
-                          const errorMsg = err?.name === 'NotAllowedError' 
-                            ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
-                            : err?.name === 'NotFoundError'
-                            ? 'No camera found. Please connect a camera and refresh.'
-                            : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
-                          setErrorMessage(errorMsg);
-                          setDetectStatus('error');
-                        }}
-                          videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
-                        className="webcam-feed"
-                        />
-                        <canvas 
-                          ref={overlayCanvasRef} 
-                          className="ghost-hand-overlay"
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            pointerEvents: 'none',
-                            borderRadius: '12px'
-                          }}
-                        />
-                      </div>
+                    <div className="content-card">
+                      <p className="content-text">{content}</p>
                     </div>
-                    <div className="content-card" style={{
-                      backgroundColor: theme.secondary,
-                      borderColor: theme.border,
-                      transition: 'background-color 0.5s ease, border-color 0.5s ease'
-                    }}>
-                      <p className="content-text" style={{ color: theme.text }}>{content}</p>
-                    </div>
-                    <div className="content-card" style={{ 
-                      marginBottom: 'var(--spacing-md)',
-                      backgroundColor: theme.secondary,
-                      borderColor: theme.border,
-                      transition: 'background-color 0.5s ease, border-color 0.5s ease'
-                    }}>
-                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, color: theme.text }}>
-                        {currentQuestion.text}
+                    <div className="content-card" style={{ marginBottom: 'var(--spacing-md)' }}>
+                      {currentQuestion?.imageData && (
+                        <img 
+                          src={currentQuestion.imageData} 
+                          alt="Question" 
+                          style={{ 
+                            maxWidth: '100%', 
+                            maxHeight: '300px', 
+                            marginBottom: 'var(--spacing-md)',
+                            borderRadius: 'var(--border-radius)',
+                            objectFit: 'contain'
+                          }} 
+                        />
+                      )}
+                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
+                        {currentQuestion?.text || 'No question available'}
                       </p>
                       <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans: any) => {
-                          const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
-                          const isSelected = selectedAnswer === ans.letter;
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
-                          const showAsIncorrect = isSelected && !isCorrect;
-                          
-                          return (
+                        {(currentQuestion?.answers || []).map((ans: any) => (
                           <div
                             key={ans.letter}
-                            className={`answer-choice ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
+                            className={`answer-choice ${selectedAnswer === ans.letter ? (ans.letter === currentQuestion?.correctAnswer ? 'correct' : 'incorrect') : ''}`}
                             style={{
                               padding: 'var(--spacing-md)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
+                              border: `2px solid ${selectedAnswer === ans.letter ? (ans.letter === currentQuestion?.correctAnswer ? 'var(--success-color)' : 'var(--error-color)') : 'var(--border-color)'}`,
                               borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              fontWeight: isSelected ? 600 : 400
+                              backgroundColor: selectedAnswer === ans.letter ? (ans.letter === currentQuestion?.correctAnswer ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)') : 'transparent',
+                              fontWeight: selectedAnswer === ans.letter ? 600 : 400
                             }}
-                            onClick={() => handleAnswerSelection(ans.letter)}
                           >
                             <strong>{ans.letter})</strong> {ans.value}
                           </div>
-                          );
-                        })}
+                        ))}
                       </div>
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
@@ -2519,10 +2534,10 @@ export function Learn() {
                       <div className="gesture-instructions-grid">
                         <div className="gesture-instruction-item">
                           <span className="instruction-icon">1️⃣</span>
-              <div>
+                          <div>
                             <strong>1 Finger</strong>
                             <span className="instruction-desc">Answer A</span>
-              </div>
+                          </div>
                         </div>
                         <div className="gesture-instruction-item">
                           <span className="instruction-icon">2️⃣</span>
@@ -2540,7 +2555,7 @@ export function Learn() {
                         </div>
                         <div className="gesture-instruction-item">
                           <span className="instruction-icon">4️⃣</span>
-              <div>
+                          <div>
                             <strong>4 Fingers</strong>
                             <span className="instruction-desc">Answer D</span>
                           </div>
@@ -2566,51 +2581,68 @@ export function Learn() {
                         💡 <strong>Tip:</strong> No typing needed! Just use your hands to respond.
                       </p>
                     </div>
-              </div>
+                  </div>
                 </motion.div>
-            )}
+              )}
 
-            {currentMode === 'simple' && (
+              {currentMode === 'simple' && (
                 <motion.div 
                   className="mode-content"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
+                  key={currentQuestionIndex}
                 >
                   <div className="simple-mode">
-                    {streak > 0 && (
-                      <div className="streak-indicator" style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        padding: '0.75rem 1.5rem',
-                        backgroundColor: streak >= 3 ? '#FF6B35' : '#FFA726',
-                        borderRadius: '20px',
-                        color: '#FFFFFF',
-                        fontWeight: 700,
-                        fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-                        boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
-                        marginBottom: 'var(--spacing-md)',
-                        animation: streak >= 3 ? 'pulse 1s ease-in-out infinite' : 'none'
-                      }}>
-                        {streak >= 3 ? '🔥' : '⭐'} {streak} {streak === 1 ? 'Streak' : 'Streak'}!
-                      </div>
-                    )}
                     <div className="content-card simplified">
-                      <p className="simple-text" style={{ fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 700, lineHeight: '1.8', color: '#000000' }}>
-                        {currentQuestion.text}
+                      {currentQuestion?.imageData && (
+                        <img 
+                          src={currentQuestion.imageData} 
+                          alt="Question" 
+                          style={{ 
+                            maxWidth: '100%', 
+                            maxHeight: '300px', 
+                            marginBottom: 'var(--spacing-md)',
+                            borderRadius: 'var(--border-radius)',
+                            objectFit: 'contain'
+                          }} 
+                        />
+                      )}
+                      <p className="simple-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, lineHeight: '1.6' }}>
+                        {currentQuestion?.text || 'No question available'}
                       </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', width: '100%' }}>
-                        {currentQuestion.answers.map((ans: any) => {
-                          const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
+                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        {(currentQuestion?.answers || []).map((ans: any) => {
+                          // Support both single correctAnswer and multiple correctAnswers
+                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
+                            : currentQuestion?.correctAnswer
+                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
+                              : [];
+                          
+                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
                           const isSelected = selectedAnswer === ans.letter;
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          // Show green only if this specific answer is selected AND it's correct
+                          // For multiple correct answers: show all correct answers in green when a correct one is selected
+                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
                           
                           return (
                           <div
                             key={ans.letter}
-                            className={`answer-choice ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
+                            className={`answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
+                            style={{
+                              padding: 'var(--spacing-md)',
+                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
+                              borderRadius: 'var(--border-radius)',
+                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                              cursor: 'pointer',
+                              fontWeight: isSelected ? 600 : 400,
+                              fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 1.1)'
+                            }}
                             onClick={() => handleAnswerSelection(ans.letter)}
+                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
+                            onMouseLeave={() => setHoveredElement(null)}
+                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
                           >
                             <strong>{ans.letter})</strong> {ans.value}
                           </div>
@@ -2618,19 +2650,19 @@ export function Learn() {
                         })}
                       </div>
                       {answerFeedback && (
-                        <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 0, backgroundColor: '#FFFFFF', border: '4px solid #000000', color: '#000000', fontWeight: 700, fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
+                        <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
                           {answerFeedback}
                         </div>
                       )}
-            </div>
+                    </div>
                     <div className="mode-info-card">
                       <p className="mode-description">
                         💡 <strong>Tip:</strong> Click an answer or use gestures: 1 finger = A, 2 = B, 3 = C, 4 = D
                       </p>
-            </div>
-              </div>
+                    </div>
+                  </div>
                 </motion.div>
-            )}
+              )}
             </div>
 
             <div className="action-buttons">
@@ -2694,6 +2726,7 @@ export function Learn() {
                 onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement('previous')}
                 onMouseLeave={() => setHoveredElement(null)}
                 data-buddy-type="previous"
+                disabled={currentQuestionIndex === 0}
               >
                 ⏮️ Previous Question
               </button>
@@ -2715,6 +2748,7 @@ export function Learn() {
                 onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement('next')}
                 onMouseLeave={() => setHoveredElement(null)}
                 data-buddy-type="next"
+                disabled={currentQuestionIndex >= questions.length - 1}
               >
                 ⏭️ Next Question
               </button>
@@ -2746,7 +2780,7 @@ export function Learn() {
                   >
                     Not really 👎
                   </button>
-              </div>
+                </div>
               </motion.div>
             )}
 
