@@ -1,6 +1,6 @@
 # Publishes this Vite app to GitHub Pages.
-# Repo → Settings → Pages → Source: GitHub Actions.
-# URL: https://<owner>.github.io/ReactNativeApp/
+# Repo → Settings → Pages → Build and deployment → Source: GitHub Actions.
+# URL: https://<owner>.github.io/<repo>/  (repo name sets Vite base via GITHUB_REPOSITORY)
 name: Deploy to GitHub Pages
 
 on:
