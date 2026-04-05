@@ -6,7 +6,7 @@ export function PrivateRoute({ children }: { children: ReactNode }) {
   const { currentUser, loading } = useAuth();
 
   if (loading) {
-    return <div>Loading...</div>;
+    return null;
   }
 
   return currentUser ? <>{children}</> : <Navigate to="/login" replace />;

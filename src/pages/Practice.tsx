@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './Home.css';
+import './Landing.css';
 import './Practice.css';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
@@ -13,9 +14,17 @@ import { db } from '../firebase/config';
 import { BuddyButton } from '../components/BuddyButton';
 import { BuddyPracticeGame } from '../components/BuddyPracticeGame';
 import { BuddyHelpGuide } from '../components/BuddyHelpGuide';
-import threeFingersIcon from '../assets/images/three_fingers_up.png';
+import gestureIcon from '../assets/images/gestureicon.png';
+import audioIcon from '../assets/images/audioicon.png';
+import simplifyIcon from '../assets/images/simplifyimage.png';
+import iconsModeImage from '../assets/images/iconimage.png';
+import threeStickersIcon from '../assets/images/threestickers.png';
+import fourStickersIcon from '../assets/images/fourstickers.png';
+import fiveStickersIcon from '../assets/images/fivestickers.png';
+import sixStickersIcon from '../assets/images/sixstickers.png';
+import { StickerProgress } from '../components/StickerProgress';
 
-type LearningMode = 'audio' | 'image' | 'icons' | 'gesture' | 'simple';
+type LearningMode = 'audio' | 'icons' | 'gesture' | 'simple';
 type GestureType = 'open' | 'fist' | 'point' | 'wave' | '1' | '2' | '3' | '4' | 'thumbsUp' | 'thumbsDown' | '-';
 
 interface ModeStats {
@@ -91,11 +100,24 @@ export function Practice() {
   // Mode statistics tracking
   const [modeStats, setModeStats] = useState<Record<LearningMode, ModeStats>>({
     audio: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
-    image: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
     icons: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
     gesture: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
     simple: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 }
   });
+
+  const getDifficultyTheme = (diff: number) => {
+    const level = Math.max(1, Math.min(5, Math.round(diff))) as 1 | 2 | 3 | 4 | 5;
+    const slate = ['#1e293b', '#1e293b', '#0f172a', '#0f172a', '#020617'][level - 1];
+    return {
+      primary: '#0891b2',
+      secondary: 'rgba(255, 255, 255, 0.88)',
+      accent: 'rgba(255, 255, 255, 0.78)',
+      text: slate,
+      border: '#e2e8f0',
+      background: '#f8fafc'
+    };
+  };
+  const theme = getDifficultyTheme(difficulty);
   
   // Current question tracking for check-ins
   const [showCheckIn, setShowCheckIn] = useState(false);
@@ -638,6 +660,35 @@ export function Practice() {
     }
   }
 
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const playEarcon = useCallback((kind: 'tap' | 'success' | 'wrong') => {
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new AC();
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      const mk = (freq: number, dur: number, vol: number, when: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.value = vol;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(when);
+        osc.stop(when + dur);
+      };
+      if (kind === 'tap') mk(520, 0.04, 0.06, now);
+      else if (kind === 'success') {
+        mk(660, 0.08, 0.08, now);
+        mk(880, 0.1, 0.07, now + 0.06);
+      } else mk(220, 0.12, 0.05, now);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Adaptive difficulty adjustment
   useEffect(() => {
     if (attempts < 3) return;
@@ -816,6 +867,8 @@ export function Practice() {
     
     const currentQuestion = questions[currentQuestionIndex];
     if (!currentQuestion) return;
+
+    playEarcon('tap');
     
     if (currentQuestion.questionType === 'multipleChoice') {
       // Always set the selected answer first so it's visually selected
@@ -831,6 +884,10 @@ export function Practice() {
       const isCorrect = correctAnswers.includes(answer.toUpperCase());
       
       if (isCorrect) {
+        playEarcon('success');
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(25);
+        }
         recordSuccess();
         const correctCount = correctAnswers.length;
         if (correctCount > 1) {
@@ -856,9 +913,9 @@ export function Practice() {
           }
         }, 2000);
       } else {
+        playEarcon('wrong');
         setAttempts((a) => a + 1);
         setAnswerFeedback(`❌ Not quite. Try again!`);
-        alert('Try again! You can do it!');
         speakText('Try again! You can do it!');
         
         setModeStats((ms) => {
@@ -892,6 +949,10 @@ export function Practice() {
       const noIncorrectSelected = newSelected.every(sel => currentQuestion.correctAnswers.includes(sel));
       
       if (allCorrectSelected && noIncorrectSelected && newSelected.length === currentQuestion.correctAnswers.length) {
+        playEarcon('success');
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(25);
+        }
         recordSuccess();
         setAnswerFeedback('✅ Correct! Great job!');
         speakText('Correct! Great job!');
@@ -910,7 +971,10 @@ export function Practice() {
         }, 2000);
       }
     }
-  }, [currentQuestionIndex, questions, selectedAnswers, currentMode, modeStart, recordSuccess]);
+  }, [buddyMode, currentQuestionIndex, questions, selectedAnswers, currentMode, modeStart, playEarcon, recordSuccess]);
+
+  const handleAnswerSelectionRef = useRef(handleAnswerSelection);
+  handleAnswerSelectionRef.current = handleAnswerSelection;
 
   const showCheckInAfterDelay = useCallback(() => {
     setTimeout(() => {
@@ -960,7 +1024,7 @@ export function Practice() {
         time: updatedStats[currentMode].time + (now - modeStart)
       };
       
-      const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+      const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
       const sortedByInteractions = [...modes].sort((a, b) => 
         updatedStats[b].interactions - updatedStats[a].interactions
       );
@@ -1088,17 +1152,6 @@ export function Practice() {
             attempts: stats.audio.attempts,
             successes: stats.audio.successes
           },
-          image: {
-            timeSpent: stats.image.time,
-            interactions: stats.image.interactions,
-            frustration: stats.image.frustration,
-            accuracy: stats.image.accuracy,
-            averageResponseTime: stats.image.responseTime.length > 0 
-              ? stats.image.responseTime.reduce((a, b) => a + b, 0) / stats.image.responseTime.length 
-              : 0,
-            attempts: stats.image.attempts,
-            successes: stats.image.successes
-          },
           icons: {
             timeSpent: stats.icons.time,
             interactions: stats.icons.interactions,
@@ -1191,11 +1244,11 @@ export function Practice() {
       const profileRef = doc(db, 'users', currentUser.uid, 'learningProfile', 'current');
       const existingProfile = await getDoc(profileRef);
       
-      const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+      const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
       const totalTime = Object.values(stats).reduce((sum, s) => sum + s.time, 0);
       const sessionAccuracy = totalAttempts > 0 ? (totalSuccesses / totalAttempts) * 100 : 0;
       
-      const visualModes = ['image', 'icons'];
+      const visualModes = ['icons'];
       const auditoryModes = ['audio'];
       const kinestheticModes = ['gesture'];
       
@@ -1325,6 +1378,11 @@ export function Practice() {
             const height = video.videoHeight || 480;
             overlayCanvas.width = width;
             overlayCanvas.height = height;
+            const mainCanvas = canvasRef.current;
+            if (mainCanvas) {
+              mainCanvas.width = width;
+              mainCanvas.height = height;
+            }
           }
         };
         
@@ -1334,7 +1392,7 @@ export function Practice() {
 
         const hands = new Hands({
           locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
           }
         });
 
@@ -1534,16 +1592,16 @@ export function Practice() {
 
                   const actions: Partial<Record<GestureType, () => void>> = {
                     '1': () => {
-                      handleAnswerSelection('A');
+                      handleAnswerSelectionRef.current('A');
                     },
                     '2': () => {
-                      handleAnswerSelection('B');
+                      handleAnswerSelectionRef.current('B');
                     },
                     '3': () => {
-                      handleAnswerSelection('C');
+                      handleAnswerSelectionRef.current('C');
                     },
                     '4': () => {
-                      handleAnswerSelection('D');
+                      handleAnswerSelectionRef.current('D');
                     },
                     thumbsUp: () => {
                       recordSuccess();
@@ -1644,7 +1702,7 @@ export function Practice() {
         cameraRef.current = null;
       }
     };
-  }, [mediaReady, currentMode, recordHelp, changeMode, nextItem, recordSuccess, handleAnswerSelection]);
+  }, [mediaReady, currentMode, recordHelp, changeMode, nextItem, recordSuccess]);
 
   // Active adaptation
   useEffect(() => {
@@ -1652,7 +1710,7 @@ export function Practice() {
     const currentAccuracy = modeStats[currentMode].accuracy;
     
     if (currentFrustration >= 3 && currentAccuracy < 50 && modeStats[currentMode].attempts >= 3) {
-      const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+      const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
       const bestAlternative = modes
         .filter(m => m !== currentMode)
         .sort((a, b) => {
@@ -1675,7 +1733,7 @@ export function Practice() {
   
   // Generate learning profile
   const generateProfile = () => {
-    const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+    const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
     const sortedByInteractions = [...modes].sort((a, b) => 
       modeStats[b].interactions - modeStats[a].interactions
     );
@@ -1717,27 +1775,24 @@ export function Practice() {
   // Loading state
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        flexDirection: 'column'
-      }}>
-        <h2>Loading Practice Session...</h2>
-        <div style={{ 
-          width: '40px', 
-          height: '40px', 
-          border: '4px solid #f3f3f3', 
-          borderTop: '4px solid #667eea', 
-          borderRadius: '50%', 
-          animation: 'spin 1s linear infinite',
-          marginTop: '20px'
-        }}></div>
+      <div className="landing-wrapper brand-bg-light landing-loading-screen landing-loading-light">
+        <p className="text-cyan-solid" style={{ fontWeight: 600, marginBottom: '1rem' }}>
+          Loading practice session…
+        </p>
+        <div
+          style={{
+            width: '40px',
+            height: '40px',
+            border: '4px solid rgba(8, 145, 178, 0.2)',
+            borderTop: '4px solid var(--brand-cyan)',
+            borderRadius: '50%',
+            animation: 'practice-spin 1s linear infinite'
+          }}
+          aria-hidden
+        />
         <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+          @keyframes practice-spin {
+            to { transform: rotate(360deg); }
           }
         `}</style>
       </div>
@@ -1747,17 +1802,15 @@ export function Practice() {
   // Error if no questions
   if (questions.length === 0) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        flexDirection: 'column'
-      }}>
-        <h2>No Questions Available</h2>
-        <p>This assignment doesn't have any questions yet.</p>
-        <button onClick={() => navigate('/home')} className="logout-button">
-          Go Back
+      <div className="landing-wrapper brand-bg-light" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+        <h1 className="hero-title-dark" style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>
+          No questions available
+        </h1>
+        <p className="hero-subtitle-dark" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          This assignment doesn&apos;t have any questions yet.
+        </p>
+        <button type="button" onClick={() => navigate('/home')} className="btn-cyan-solid-lg">
+          Back to home
         </button>
       </div>
     );
@@ -1769,7 +1822,7 @@ export function Practice() {
   // Return the UI (same as your Learn component but with dynamic questions)
   return (
     <motion.div 
-      className="learn-container" 
+      className="learn-container landing-wrapper brand-bg-light learn-page-brand" 
       initial="hidden" 
       animate="visible" 
       variants={containerVariants}
@@ -1836,24 +1889,33 @@ export function Practice() {
           : ''}
       </div>
       
-      <motion.header className="learn-header" role="banner" variants={itemVariants}>
-        <motion.h1 
-          initial={{ scale: 0.95, opacity: 0 }} 
-          animate={{ scale: 1, opacity: 1 }} 
-          transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-        >
-          Adaptive Learning 📚
-        </motion.h1>
+      <motion.nav
+        className="glass-nav glass-nav-light learn-top-nav"
+        role="navigation"
+        aria-label="Practice session"
+        variants={itemVariants}
+      >
         <motion.button
+          type="button"
           onClick={goBack}
-          className="logout-button"
+          className="btn-ghost-dark"
           aria-label="Go back to home"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
         >
-          Back to Home
+          ← Back
         </motion.button>
-      </motion.header>
+        <div className="nav-actions learn-nav-actions">
+          <span id="practice-nav-progress-label" className="visually-hidden">
+            Question progress
+          </span>
+          <StickerProgress
+            total={questions.length}
+            currentIndex={currentQuestionIndex}
+            labelId="practice-nav-progress-label"
+          />
+        </div>
+      </motion.nav>
 
       {sessionOver && profile && (
         <motion.div 
@@ -1891,7 +1953,10 @@ export function Practice() {
         </motion.div>
       )}
 
-      <main id="main-content" className="learn-main" role="main">
+      <main id="main-content" className="learn-main learn-main--landing" role="main" style={{
+        background: `linear-gradient(180deg, ${theme.background} 0%, #f1f5f9 45%, #e2e8f0 100%)`,
+        transition: 'background-color 0.5s ease'
+      }}>
         {mpStatus === 'error' && (
           <motion.div 
             className="error-message"
@@ -1899,7 +1964,10 @@ export function Practice() {
             animate={{ opacity: 1, y: 0 }}
           >
             <h3>⚠️ MediaPipe Loading Error</h3>
-            <p>Failed to load MediaPipe Hands. Please refresh the page or check your internet connection.</p>
+            <p>
+              {errorMessage ||
+                'Failed to load MediaPipe Hands. Please refresh the page or check your internet connection.'}
+            </p>
             <button className="logout-button" onClick={() => window.location.reload()}>
               Refresh Page
             </button>
@@ -1908,8 +1976,14 @@ export function Practice() {
         
         <div className="learn-panes">
           {/* Left Pane: Gesture & Interaction */}
-          <motion.div className="learn-pane gesture-pane" variants={cardVariants}>
-            <h2>👋 Gesture & Interaction</h2>
+          <motion.div className="learn-pane gesture-pane learn-pane--glass" variants={cardVariants} style={{
+            borderColor: theme.border,
+            transition: 'background-color 0.5s ease, border-color 0.5s ease'
+          }}>
+            <h2 className="learn-pane-title" style={{ color: theme.text, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <img src={gestureIcon} alt="" className="learn-pane-heading-icon" width={28} height={28} />
+              Gesture & Interaction
+            </h2>
             
             {mpStatus === 'loading' && (
               <div className="loading-message">
@@ -1920,40 +1994,60 @@ export function Practice() {
               </div>
             )}
             
+            {currentMode !== 'gesture' && (
             <div className="webcam-section">
-              <div className="webcam-wrapper">
-                <Webcam
-                  ref={webcamRef}
-                  audio={false}
-                  onUserMedia={() => setMediaReady(true)}
-                onUserMediaError={(error) => {
-                  console.error('Webcam error:', error);
-                  const err = error instanceof DOMException ? error : null;
-                  const errorMsg = err?.name === 'NotAllowedError' 
-                    ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
-                    : err?.name === 'NotFoundError'
-                    ? 'No camera found. Please connect a camera and refresh.'
-                    : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
-                  setErrorMessage(errorMsg);
-                  setDetectStatus('error');
-                }}
-                  videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
-                className="webcam-feed"
-                />
+              <div className="gesture-engine-container" aria-hidden="true">
+                <div
+                  className="webcam-wrapper"
+                  style={{ position: 'relative', display: 'inline-block' }}
+                >
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    onUserMedia={() => setMediaReady(true)}
+                  onUserMediaError={(error) => {
+                    console.error('Webcam error:', error);
+                    const err = error instanceof DOMException ? error : null;
+                    const errorMsg = err?.name === 'NotAllowedError' 
+                      ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
+                      : err?.name === 'NotFoundError'
+                      ? 'No camera found. Please connect a camera and refresh.'
+                      : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
+                    setErrorMessage(errorMsg);
+                    setDetectStatus('error');
+                  }}
+                    videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
+                  className="webcam-feed"
+                  />
+                  <canvas 
+                    ref={overlayCanvasRef} 
+                    className="ghost-hand-overlay"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none',
+                      borderRadius: '12px'
+                    }}
+                  />
+                </div>
                 <canvas 
-                  ref={overlayCanvasRef} 
-                  className="ghost-hand-overlay"
+                  ref={canvasRef} 
+                  className="gesture-canvas"
                 />
               </div>
-              <canvas 
-                ref={canvasRef} 
-                className="gesture-canvas"
-              />
               <div className="detection-status">
                 <span className={`status-indicator ${detectStatus === 'ready' ? 'ready' : detectStatus === 'error' ? 'error' : ''}`}>
                   {detectStatus === 'ready' ? '●' : detectStatus === 'error' ? '✗' : '○'}
                 </span>
                 {detectStatus === 'ready' ? 'Camera Ready' : detectStatus === 'error' ? 'Error' : 'Initializing...'}
+                {detectStatus === 'ready' && (
+                  <span className="hand-indicator-badge" title="Camera is on for gestures">
+                    ✋ Hand camera on
+                  </span>
+                )}
               </div>
               {detectStatus === 'error' && errorMessage && (
                 <div className="error-detail">
@@ -2010,13 +2104,14 @@ export function Practice() {
                 </div>
               )}
             </div>
+            )}
 
             <div className="gesture-info">
               <div className="gesture-display">
                 <div className="gesture-icon">
                   {gesture === '1' && '1️⃣'}
                   {gesture === '2' && '2️⃣'}
-                  {gesture === '3' && <img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px', display: 'inline-block' }} />}
+                  {gesture === '3' && <img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} />}
                   {gesture === '4' && '4️⃣'}
                   {gesture === 'thumbsUp' && '👍'}
                   {gesture === 'thumbsDown' && '👎'}
@@ -2074,7 +2169,7 @@ export function Practice() {
                     <span>2 Fingers = Answer B</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon"><img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px' }} /></span>
+                    <span className="guide-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px' }} /></span>
                     <span>3 Fingers = Answer C</span>
                   </div>
                   <div className="guide-item">
@@ -2124,8 +2219,11 @@ export function Practice() {
           </motion.div>
 
           {/* Right Pane: Adaptive Learning */}
-          <motion.div className="learn-pane learning-pane" variants={cardVariants}>
-            <h2>📖 Adaptive Learning Content</h2>
+          <motion.div className="learn-pane learning-pane learn-pane--glass" variants={cardVariants}>
+            <h2 id="practice-content-heading" className="learn-content-heading">
+              <span className="landing-badge-cyan learn-heading-badge">Practice</span>
+              <span className="learn-content-heading__title">Assignment</span>
+            </h2>
             
             {showSwitchTooltip && switchReason && (
               <motion.div
@@ -2178,31 +2276,29 @@ export function Practice() {
                   className={`mode-button ${currentMode === 'audio' ? 'active' : ''}`}
                   onClick={() => changeMode('audio')}
                 >
-                  🔊 Audio
-                </button>
-                <button 
-                  className={`mode-button ${currentMode === 'image' ? 'active' : ''}`}
-                  onClick={() => changeMode('image')}
-                >
-                  🖼️ Image
+                  <img src={audioIcon} alt="" className="mode-button-img" width={28} height={28} />
+                  Audio
                 </button>
                 <button 
                   className={`mode-button ${currentMode === 'icons' ? 'active' : ''}`}
                   onClick={() => changeMode('icons')}
                 >
-                  🎨 Icons
+                  <img src={iconsModeImage} alt="" className="mode-button-img" width={28} height={28} />
+                  Icons
                 </button>
                 <button 
                   className={`mode-button ${currentMode === 'gesture' ? 'active' : ''}`}
                   onClick={() => changeMode('gesture')}
                 >
-                  👋 Gesture
+                  <img src={gestureIcon} alt="" className="mode-button-img" width={28} height={28} />
+                  Gesture
                 </button>
                 <button 
                   className={`mode-button ${currentMode === 'simple' ? 'active' : ''}`}
                   onClick={() => changeMode('simple')}
                 >
-                  📝 Simple
+                  <img src={simplifyIcon} alt="" className="mode-button-img" width={28} height={28} />
+                  Simple
                 </button>
               </div>
             </div>
@@ -2210,11 +2306,30 @@ export function Practice() {
             <div className="content-display">
               <div className="mode-indicator">
                 <span className="mode-indicator-badge">
-                  {currentMode === 'audio' && '🔊 Audio Mode'}
-                  {currentMode === 'image' && '🖼️ Visual Mode'}
-                  {currentMode === 'icons' && '🎨 Interactive Mode'}
-                  {currentMode === 'gesture' && '👋 Gesture Mode'}
-                  {currentMode === 'simple' && '📝 Simple Mode'}
+                  {currentMode === 'audio' && (
+                    <>
+                      <img src={audioIcon} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Audio Mode</span>
+                    </>
+                  )}
+                  {currentMode === 'icons' && (
+                    <>
+                      <img src={iconsModeImage} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Interactive Mode</span>
+                    </>
+                  )}
+                  {currentMode === 'gesture' && (
+                    <>
+                      <img src={gestureIcon} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Gesture Mode</span>
+                    </>
+                  )}
+                  {currentMode === 'simple' && (
+                    <>
+                      <img src={simplifyIcon} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Simple Mode</span>
+                    </>
+                  )}
                 </span>
                 <span className="mode-indicator-badge" style={{ marginLeft: 'var(--spacing-sm)' }}>
                   Question {currentQuestionIndex + 1} of {questions.length}
@@ -2229,7 +2344,9 @@ export function Practice() {
                   key={currentQuestionIndex}
                 >
                   <div className="audio-mode">
-                    <div className="mode-icon-large">🔊</div>
+                    <div className="mode-icon-large" aria-hidden>
+                      <img src={audioIcon} alt="" className="mode-icon-large-img" width={64} height={64} />
+                    </div>
                     <div className="content-card">
                       {currentQuestion?.imageData && (
                         <img 
@@ -2308,93 +2425,6 @@ export function Practice() {
                 </motion.div>
               )}
 
-              {currentMode === 'image' && (
-                <motion.div 
-                  className="mode-content"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  key={currentQuestionIndex}
-                >
-                  <div className="image-mode">
-                    {currentQuestion?.imageData ? (
-                      <div className="visual-explanation">
-                        <img 
-                          src={currentQuestion.imageData} 
-                          alt="Question" 
-                          style={{ 
-                            maxWidth: '100%', 
-                            maxHeight: '400px', 
-                            borderRadius: 'var(--border-radius)',
-                            objectFit: 'contain',
-                            marginBottom: 'var(--spacing-sm)'
-                          }} 
-                        />
-                      </div>
-                    ) : (
-                      <div className="visual-explanation">
-                        <div className="visual-icons" style={{ fontSize: '2rem' }}>
-                          🎁 → 👥 → 📊
-                        </div>
-                        <p className="visual-caption">Visual Representation</p>
-                      </div>
-                    )}
-                    <div className="content-card">
-                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
-                        {currentQuestion?.text || 'No question available'}
-                      </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {(currentQuestion?.answers || []).map((ans: any) => {
-                          // Support both single correctAnswer and multiple correctAnswers
-                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
-                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
-                            : currentQuestion?.correctAnswer
-                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
-                              : [];
-                          
-                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
-                          const isSelected = selectedAnswer === ans.letter;
-                          // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers: show all correct answers in green when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
-                          const showAsIncorrect = isSelected && !isCorrect;
-                          
-                          return (
-                          <div
-                            key={ans.letter}
-                            className={`answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
-                            style={{
-                              padding: 'var(--spacing-md)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              cursor: 'pointer',
-                              fontWeight: isSelected ? 600 : 400
-                            }}
-                            onClick={() => handleAnswerSelection(ans.letter)}
-                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
-                            onMouseLeave={() => setHoveredElement(null)}
-                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
-                          >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
-                          );
-                        })}
-                      </div>
-                      {answerFeedback && (
-                        <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
-                          {answerFeedback}
-                        </div>
-                      )}
-                    </div>
-                    <div className="mode-info-card">
-                      <p className="mode-description">
-                        💡 <strong>Tip:</strong> Visualize the problem to help understand it better.
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
               {currentMode === 'icons' && (
                 <motion.div 
                   className="mode-content"
@@ -2455,8 +2485,16 @@ export function Practice() {
                               fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))'
                             }}
                           >
-                            <span className="icon-emoji" style={{ fontSize: '2rem' }}>
-                              {ans.letter === 'A' ? '1️⃣' : ans.letter === 'B' ? '2️⃣' : ans.letter === 'C' ? <img src={threeFingersIcon} alt="3 fingers" style={{ width: '20px', height: '20px', display: 'inline-block', verticalAlign: 'middle' }} /> : '4️⃣'}
+                            <span className="icon-emoji icons-mode-sticker-wrap">
+                              {ans.letter === 'A' ? (
+                                <img src={threeStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
+                              ) : ans.letter === 'B' ? (
+                                <img src={fourStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
+                              ) : ans.letter === 'C' ? (
+                                <img src={fiveStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
+                              ) : (
+                                <img src={sixStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
+                              )}
                             </span>
                             <span className="icon-text"><strong>{ans.letter})</strong> {ans.value}</span>
                           </motion.button>
@@ -2486,10 +2524,67 @@ export function Practice() {
                   key={currentQuestionIndex}
                 >
                   <div className="gesture-mode">
-                    <div className="content-card">
-                      <p className="content-text">{content}</p>
+                    <div className="webcam-section gesture-mode-webcam" style={{
+                      width: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      marginBottom: 'var(--spacing-lg)',
+                      order: -1
+                    }}>
+                      <div className="gesture-engine-container" aria-hidden="true">
+                        <div className="webcam-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
+                          <Webcam
+                            ref={webcamRef}
+                            audio={false}
+                            onUserMedia={() => setMediaReady(true)}
+                            onUserMediaError={(error) => {
+                              console.error('Webcam error:', error);
+                              const err = error instanceof DOMException ? error : null;
+                              const errorMsg = err?.name === 'NotAllowedError'
+                                ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
+                                : err?.name === 'NotFoundError'
+                                  ? 'No camera found. Please connect a camera and refresh.'
+                                  : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
+                              setErrorMessage(errorMsg);
+                              setDetectStatus('error');
+                            }}
+                            videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
+                            className="webcam-feed"
+                          />
+                          <canvas
+                            ref={overlayCanvasRef}
+                            className="ghost-hand-overlay"
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              pointerEvents: 'none',
+                              borderRadius: '12px'
+                            }}
+                          />
+                        </div>
+                        <canvas
+                          ref={canvasRef}
+                          className="gesture-canvas"
+                          aria-hidden={true}
+                        />
+                      </div>
                     </div>
-                    <div className="content-card" style={{ marginBottom: 'var(--spacing-md)' }}>
+                    <div className="content-card learn-content-card" style={{
+                      backgroundColor: theme.secondary,
+                      borderColor: theme.border
+                    }}>
+                      <p className="content-text" style={{ color: theme.text }}>{content}</p>
+                    </div>
+                    <div className="content-card" style={{
+                      marginBottom: 'var(--spacing-md)',
+                      backgroundColor: theme.secondary,
+                      borderColor: theme.border,
+                      transition: 'background-color 0.5s ease, border-color 0.5s ease'
+                    }}>
                       {currentQuestion?.imageData && (
                         <img 
                           src={currentQuestion.imageData} 
@@ -2503,7 +2598,7 @@ export function Practice() {
                           }} 
                         />
                       )}
-                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
+                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, color: theme.text }}>
                         {currentQuestion?.text || 'No question available'}
                       </p>
                       <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
@@ -2547,7 +2642,7 @@ export function Practice() {
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon"><img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                          <span className="instruction-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
                           <div>
                             <strong>3 Fingers</strong>
                             <span className="instruction-desc">Answer C</span>
@@ -2805,6 +2900,24 @@ export function Practice() {
           </motion.div>
         </div>
       </main>
+
+      {currentMode === 'gesture' && (
+        <div className="learn-gesture-floating-pill" role="status" aria-live="polite">
+          <span
+            className={
+              gesture !== '-'
+                ? 'landing-badge-cyan learn-gesture-pill--live'
+                : 'learn-gesture-pill-muted'
+            }
+          >
+            {gesture !== '-'
+              ? `Detecting: ${gesture}`
+              : detectStatus === 'ready'
+                ? 'Waiting for gesture…'
+                : 'Getting camera ready…'}
+          </span>
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -11,7 +11,12 @@ import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
 import { createAssignment, notifyStudentsOfAssignment } from '../utils/assignments';
 import type { AssignmentSettings } from '../types/assignments';
 import './Home.css';
+import './Landing.css';
 import logoImage from '../assets/images/logo.png';
+import teacherProfileImage from '../assets/images/teacherprofile.png';
+import parentProfileImage from '../assets/images/parentprofile.png';
+import studentProfileImage from '../assets/images/studentprofile.png';
+import audioIcon from '../assets/images/audioicon.png';
 
 interface MCQSet {
   id: string;
@@ -314,7 +319,7 @@ export function TeacherHome() {
 
     const container = document.querySelector('.home-container');
     if (container) {
-      container.className = `home-container spacing-${spacing}`;
+      container.className = `landing-wrapper brand-bg-light home-container spacing-${spacing}`;
     }
   }, [textSize, highContrast, fontPreference, reducedMotion, spacing]);
 
@@ -1160,188 +1165,98 @@ export function TeacherHome() {
 
   return (
     <motion.div
-      className="home-container"
+      className={`landing-wrapper brand-bg-light home-container spacing-${spacing}`}
       initial="hidden"
       animate="visible"
       variants={containerVariants}
     >
-      <motion.header
-        className="home-header"
-        role="banner"
-        variants={itemVariants}
-      >
-        <motion.h1
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-        >
-          <img src={logoImage} alt="JustWav3" style={{ maxHeight: '50px', width: 'auto', verticalAlign: 'middle' }} /> 👩‍🏫
-        </motion.h1>
-        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
+      <nav className="glass-nav glass-nav-light parent-dashboard-nav" aria-label="Teacher dashboard">
+        <div className="nav-left">
+          <img src={logoImage} alt="JustWav3" className="nav-logo" width={150} height={44} />
+          <span className="nav-divider" aria-hidden="true" />
+          <div className="nav-user-pill">
+            <img src={teacherProfileImage} alt="" className="avatar-sm" width={32} height={32} />
+            <span className="text-dark-sm">Teacher Portal</span>
+          </div>
+        </div>
+        <div className="nav-actions">
           <motion.button
+            type="button"
             onClick={() => { setNavigating(true); navigate('/messages'); }}
-            className="messaging-button"
-            aria-label="Open Connect"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: (unreadMessageCount > 0 || pendingRequestCount > 0) 
-                ? 'linear-gradient(135deg, #FF3B30 0%, #FF6B6B 50%, #FF3B30 100%)'
-                : 'linear-gradient(135deg, var(--disability-blue) 0%, #4169E1 50%, var(--disability-blue) 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: (unreadMessageCount > 0 || pendingRequestCount > 0)
-                ? '0 8px 24px rgba(255, 59, 48, 0.4)'
-                : '0 8px 24px rgba(65, 105, 225, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            className="btn-ghost-dark relative"
+            aria-label="Open messages"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
-            💬
+            Messages
+            {(unreadMessageCount > 0 || pendingRequestCount > 0) && (
+              <span className="notification-dot" aria-hidden="true" />
+            )}
           </motion.button>
           <motion.button
+            type="button"
             onClick={() => setShowAccessibilityModal(true)}
-            className="accessibility-settings-button"
-            aria-label="Open accessibility settings"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: 'linear-gradient(135deg, var(--disability-green) 0%, #00A86B 50%, var(--disability-green) 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(0, 132, 61, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            className="btn-outline-dark-lg"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            ⚙️
+            Accessibility
           </motion.button>
           <motion.button
+            type="button"
             onClick={handleLogout}
-            className="logout-button"
-            aria-label="Log out of your account"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: 'linear-gradient(135deg, #FF6B6B 0%, #FF3B30 50%, #FF6B6B 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            className="btn-cyan-solid"
+            aria-label="Sign out"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            logout
+            Sign Out
           </motion.button>
         </div>
-      </motion.header>
-      <main id="main-content" className="home-main" role="main">
+      </nav>
+      <main id="main-content" className="parent-dashboard-main container-xl" role="main">
         <EmailVerificationBanner />
-        <motion.div
-          className="welcome-card"
-          variants={cardVariants}
-          whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
-          <motion.h2
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            Welcome, Teacher! 👩‍🏫
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-          >
-            You are logged in as:
-          </motion.p>
-          <motion.p
-            className="user-email"
-            aria-label={`User email: ${currentUser?.email}`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
-          >
+        <header className="dashboard-header-text">
+          <h1 className="hero-title-dark-sm">
+            Welcome back, <span className="text-cyan-solid">Teacher</span>
+          </h1>
+          <p className="bento-text-muted">Monitor your students&apos; learning progress and access their reports.</p>
+          <p className="user-email" aria-label={currentUser?.email ? `Signed in as ${currentUser.email}` : 'Account'}>
             {currentUser?.email}
-          </motion.p>
-          <motion.p
-            className="welcome-message"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-          >
-            Monitor your students' learning progress and access their reports.
-          </motion.p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '0.75rem' }}>
+          </p>
+          <div className="parent-dashboard-quick-actions">
             <motion.button
+              type="button"
               onClick={() => { setNavigating(true); navigate('/learn'); }}
-              className="logout-button"
-              aria-label="Demo version"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
+              className="btn-outline-dark-lg"
+              aria-label="Open demo version"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               Demo Version
             </motion.button>
             <motion.button
+              type="button"
               onClick={() => { setNavigating(true); navigate('/practice'); }}
-              className="logout-button"
+              className="btn-cyan-solid"
               aria-label="Start practice"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
-              style={{ 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
-              }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               Start Practice
             </motion.button>
             <motion.button
+              type="button"
               onClick={() => { setNavigating(true); navigate('/create-mcq'); }}
-              className="logout-button"
+              className="btn-cyan-solid"
               aria-label="Create MCQ Practice"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
-              style={{ 
-                background: 'linear-gradient(135deg, var(--primary-color) 0%, #4169E1 100%)',
-                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
-              }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               Create MCQ Practice
             </motion.button>
           </div>
-        </motion.div>
+        </header>
 
         {/* MCQ Sets Section */}
         <motion.section
@@ -1444,7 +1359,13 @@ export function TeacherHome() {
                       animate="visible"
                       whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
                     >
-                      <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>🎓</div>
+                      <div className="feature-icon-large" style={{ marginBottom: 'var(--spacing-sm)' }}>
+                        {request.requestorRole === 'teacher' ? (
+                          <img src={teacherProfileImage} alt="" className="teacher-role-icon-img" />
+                        ) : (
+                          <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                        )}
+                      </div>
                       <h4>{request.requestorEmail}</h4>
                       <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
                         {request.requestorRole === 'student' ? 'Student' : 'Teacher'} wants to connect
@@ -1491,7 +1412,9 @@ export function TeacherHome() {
                       animate="visible"
                       whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
                     >
-                      <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>🎓</div>
+                      <div className="feature-icon-large" style={{ marginBottom: 'var(--spacing-sm)' }}>
+                        <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                      </div>
                       <h4>{request.requestedEmail}</h4>
                       <p style={{ color: 'var(--text-secondary)' }}>⏳ Waiting for response...</p>
                       <p style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)', marginTop: 'var(--spacing-xs)' }}>
@@ -1512,7 +1435,16 @@ export function TeacherHome() {
           aria-labelledby="your-students-heading"
           variants={itemVariants}
         >
-          <h3 id="your-students-heading">Your Students 🎓</h3>
+          <h3 id="your-students-heading">
+            <img
+              src={studentProfileImage}
+              alt=""
+              className="student-role-icon-heading"
+              width={32}
+              height={32}
+            />{' '}
+            Your Students
+          </h3>
           {myStudents.length === 0 ? (
             <div className="reports-empty">
               <p>You don't have any connected students yet.</p>
@@ -1533,7 +1465,9 @@ export function TeacherHome() {
                     animate="visible"
                     whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
                   >
-                    <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>🎓</div>
+                    <div className="feature-icon-large" style={{ marginBottom: 'var(--spacing-sm)' }}>
+                      <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                    </div>
                     <h4>{connection.studentEmail}</h4>
                     <p>Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}</p>
                     
@@ -1561,7 +1495,14 @@ export function TeacherHome() {
                             fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)',
                             color: 'var(--text-color)'
                           }}>
-                            👨‍👩‍👧‍👦 {parent.parentEmail}
+                            <img
+                              src={parentProfileImage}
+                              alt=""
+                              className="parent-role-icon-inline"
+                              width={18}
+                              height={18}
+                            />{' '}
+                            {parent.parentEmail}
                           </p>
                         ))}
                       </div>
@@ -1638,7 +1579,9 @@ export function TeacherHome() {
                     style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}
                   >
                     <div style={{ flex: 1 }}>
-                      <div className="feature-icon-large">🎓</div>
+                      <div className="feature-icon-large">
+                        <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                      </div>
                       <h4>{s.email}</h4>
                       <p>Reports: {s.reports.length}</p>
                     </div>
@@ -2135,7 +2078,9 @@ export function TeacherHome() {
                       className="accessibility-feature-button"
                       onClick={readPage}
                     >
-                      <span className="button-icon">🔊</span>
+                      <span className="button-icon" aria-hidden>
+                        <img src={audioIcon} alt="" width={20} height={20} />
+                      </span>
                       <span className="button-text">Read Page</span>
                     </button>
                     <button
@@ -2587,7 +2532,7 @@ export function TeacherHome() {
                         padding: '14px 28px',
                         background: assignStudentIds.length === 0 || !assignDueDate || assigning
                           ? 'var(--glass-border)'
-                          : 'linear-gradient(135deg, var(--primary-color) 0%, #4169E1 100%)',
+                          : 'linear-gradient(135deg, #29c5e6 0%, #1ba8cc 100%)',
                         color: 'white',
                         border: 'none',
                         borderRadius: '12px',
@@ -2597,7 +2542,7 @@ export function TeacherHome() {
                         minHeight: '44px',
                         boxShadow: assignStudentIds.length === 0 || !assignDueDate || assigning
                           ? 'none'
-                          : '0 8px 24px rgba(102, 126, 234, 0.4)',
+                          : '0 8px 24px rgba(41, 197, 230, 0.35)',
                       }}
                       whileHover={assignStudentIds.length === 0 || !assignDueDate || assigning ? {} : { scale: 1.05 }}
                       whileTap={assignStudentIds.length === 0 || !assignDueDate || assigning ? {} : { scale: 0.95 }}

@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
-import { NavigationProvider, useNavigation } from './contexts/NavigationContext';
+import { NavigationProvider } from './contexts/NavigationContext';
 import { PrivateRoute } from './components/PrivateRoute';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
@@ -13,7 +13,6 @@ import { LearnDemo } from './pages/LearnDemo';
 import { Practice } from './pages/Practice';
 import { Messages } from './pages/Messages';
 import { CreateMCQ } from './pages/CreateMCQ';
-import { Loading } from './components/Loading';
 import './App.css';
 
 const routerBasename =
@@ -21,11 +20,9 @@ const routerBasename =
 
 function AnimatedRoutes() {
   const location = useLocation();
-  const { isNavigating } = useNavigation();
 
   return (
     <>
-      {isNavigating && <Loading />}
       <PageTransition>
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>

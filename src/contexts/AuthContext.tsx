@@ -12,7 +12,6 @@ import {
 import type { User } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import { Loading } from '../components/Loading';
 import { withRateLimit } from '../utils/rateLimiter';
 
 export type UserRole = 'parent' | 'student' | 'teacher' | null;
@@ -230,8 +229,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={value}>
-      {loading ? <Loading /> : children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
   );
 }

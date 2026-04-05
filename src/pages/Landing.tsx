@@ -5,28 +5,32 @@ import { useNavigation } from '../contexts/NavigationContext';
 import { useAuth } from '../contexts/AuthContext';
 import './Landing.css';
 import logoImage from '../assets/images/logo.png';
+import gestureEngineImage from '../assets/images/gesturerecognitionengineimg.png';
+import gestureIcon from '../assets/images/gestureicon.png';
+import audioIcon from '../assets/images/audioicon.png';
+import simplifyImage from '../assets/images/simplifyimage.png';
+import iconFeatureImage from '../assets/images/iconimage.png';
+import teacherProfileImage from '../assets/images/teacherprofile.png';
+import parentProfileImage from '../assets/images/parentprofile.png';
+import studentProfileImage from '../assets/images/studentprofile.png';
 
 export function Landing() {
   const navigate = useNavigate();
   const { setNavigating } = useNavigation();
-  const { currentUser, loading } = useAuth();
+  const { currentUser } = useAuth();
   const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!loading && currentUser) navigate('/home');
-  }, [currentUser, loading, navigate]);
+    if (currentUser) navigate('/home');
+  }, [currentUser, navigate]);
 
   const handleAction = (path: string) => {
     setNavigating(true);
     navigate(path);
   };
 
-  if (loading || currentUser) {
-    return (
-      <div className="landing-loading-screen" role="status" aria-live="polite">
-        JustWav3…
-      </div>
-    );
+  if (currentUser) {
+    return null;
   }
 
   const heroTransition = shouldReduceMotion
@@ -34,14 +38,14 @@ export function Landing() {
     : { duration: 0.8, ease: [0.22, 1, 0.36, 1] as const };
 
   return (
-    <div className="landing-wrapper">
-      <nav className="glass-nav" aria-label="Primary">
-        <img src={logoImage} alt="JustWav3" className="nav-logo" width={140} height={40} />
+    <div className="landing-wrapper brand-bg-light">
+      <nav className="glass-nav glass-nav-light" aria-label="Primary">
+        <img src={logoImage} alt="JustWav3" className="nav-logo" width={196} height={56} />
         <div className="nav-actions">
-          <button type="button" onClick={() => handleAction('/login')} className="btn-ghost">
+          <button type="button" onClick={() => handleAction('/login')} className="btn-ghost-dark">
             Sign In
           </button>
-          <button type="button" onClick={() => handleAction('/signup')} className="btn-primary-sm">
+          <button type="button" onClick={() => handleAction('/signup')} className="btn-cyan-solid">
             Get Started
           </button>
         </div>
@@ -55,27 +59,26 @@ export function Landing() {
             animate={{ opacity: 1, y: 0 }}
             transition={heroTransition}
           >
-            <span className="landing-badge">v2.0 Now Live</span>
-            <h1 id="hero-heading" className="hero-title">
-              Learning at the <br />
-              <span className="text-gradient">Speed of Gesture.</span>
+            <span className="landing-badge-cyan">Designed for WCAG 2.2</span>
+            <h1 id="hero-heading" className="hero-title-dark">
+              New wave of <span className="text-cyan-solid">learning.</span>
             </h1>
-            <p className="hero-subtitle">
-              The world’s first adaptive multimodal interface. Control your progress with a wave, a
-              touch, or a glance.
+            <p className="hero-subtitle-dark">
+              An adaptive multimodal web app built with parents and accessibility experts, designed to
+              fill the gaps traditional tools miss for kids with learning disabilities.
             </p>
             <div className="hero-cta-group">
               <button
                 type="button"
                 onClick={() => handleAction('/signup')}
-                className="btn-primary-lg"
+                className="btn-cyan-solid-lg"
               >
                 Start Learning Free
               </button>
               <button
                 type="button"
                 onClick={() => handleAction('/learn-demo')}
-                className="btn-secondary-lg"
+                className="btn-outline-dark-lg"
               >
                 Watch Demo
               </button>
@@ -88,63 +91,120 @@ export function Landing() {
             Product capabilities
           </h2>
           <div className="bento-grid">
-            <article className="bento-item main-feature">
+            <article className="bento-card bento-card-main">
               <div className="bento-content">
-                <h3>Gesture Engine</h3>
-                <p>1–4 fingers for answers. Thumbs up to confirm. Zero latency.</p>
+                <h3 className="bento-heading-cyan">Gesture Engine</h3>
+                <p className="bento-text-muted">
+                  1–4 fingers for answers. Thumbs up to confirm. Zero latency.
+                </p>
+                <p className="bento-text-muted gesture-mediapipe-note">
+                  Made with Google&apos;s MediaPipe library.
+                </p>
               </div>
-              <div className="gesture-viz" aria-hidden="true">
-                <div className="gesture-track">
-                  <span className="gesture-finger" data-n="1" />
-                  <span className="gesture-finger" data-n="2" />
-                  <span className="gesture-finger" data-n="3" />
-                  <span className="gesture-finger" data-n="4" />
+              <div className="gesture-viz gesture-viz-light">
+                <img
+                  src={gestureEngineImage}
+                  alt=""
+                  className="gesture-engine-img"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+            </article>
+
+            <article className="bento-card bento-card-learning-modes">
+              <h3 className="bento-heading-dark bento-heading-learning-modes">4 Learning Modes</h3>
+              <div className="mode-pills mode-pills-light mode-pills-learning-modes">
+                <span className="mode-pill mode-pill-with-icon">
+                  <img src={audioIcon} alt="" className="mode-pill-icon" width={24} height={24} />
+                  Audio
+                </span>
+                <span className="mode-pill mode-pill-with-icon">
+                  <img src={iconFeatureImage} alt="" className="mode-pill-icon" width={24} height={24} />
+                  Icons
+                </span>
+                <span className="mode-pill mode-pill-with-icon">
+                  <img src={gestureIcon} alt="" className="mode-pill-icon" width={24} height={24} />
+                  Gesture
+                </span>
+                <span className="mode-pill mode-pill-with-icon">
+                  <img src={simplifyImage} alt="" className="mode-pill-icon" width={24} height={24} />
+                  Simple
+                </span>
+              </div>
+            </article>
+
+            <article
+              className="bento-card bento-card-wide"
+              id="role-pathways"
+              aria-labelledby="role-pathways-heading"
+            >
+              <div className="bento-content">
+                <h3 id="role-pathways-heading" className="bento-heading-dark">
+                  Role-Based Dashboards
+                </h3>
+                <p className="bento-text-muted">
+                  Seamless sync between Students, Teachers, and Parents.
+                </p>
+              </div>
+              <div className="dashboard-preview dashboard-preview-light" aria-hidden="true">
+                <div className="dash-sidebar dash-sidebar-roles">
+                  <div className="dash-role-row dash-role-row--active">
+                    <img
+                      src={teacherProfileImage}
+                      alt=""
+                      className="dash-teacher-avatar"
+                      width={44}
+                      height={44}
+                    />
+                    <span className="dash-role-label">Teacher</span>
+                  </div>
+                  <div className="dash-role-row">
+                    <img
+                      src={studentProfileImage}
+                      alt=""
+                      className="dash-student-avatar"
+                      width={44}
+                      height={44}
+                    />
+                    <span className="dash-role-label">Student</span>
+                  </div>
+                  <div className="dash-role-row">
+                    <img
+                      src={parentProfileImage}
+                      alt=""
+                      className="dash-parent-avatar"
+                      width={44}
+                      height={44}
+                    />
+                    <span className="dash-role-label">Parent</span>
+                  </div>
                 </div>
-                <div className="gesture-pulse" />
-              </div>
-            </article>
-
-            <article className="bento-item accent-1">
-              <h3>Adaptive Paths</h3>
-              <p>Difficulty that breathes with you.</p>
-            </article>
-
-            <article className="bento-item accent-2">
-              <h3>5 Learning Modes</h3>
-              <div className="mode-pills">
-                <span>Audio</span>
-                <span>Visual</span>
-                <span>Icons</span>
-              </div>
-            </article>
-
-            <article className="bento-item wide">
-              <div className="bento-content">
-                <h3>Role-Based Dashboards</h3>
-                <p>Seamless sync between Students, Teachers, and Parents.</p>
-              </div>
-              <div className="dashboard-preview" aria-hidden="true">
-                <div className="dash-sidebar" />
                 <div className="dash-main">
-                  <div className="dash-row dash-header" />
+                  <div className="dash-row dash-header dash-header-cyan" />
                   <div className="dash-row" />
                   <div className="dash-row" />
                   <div className="dash-cards">
-                    <div className="dash-card" />
-                    <div className="dash-card" />
-                    <div className="dash-card" />
+                    <div className="dash-card dash-card-light" />
+                    <div className="dash-card dash-card-light" />
+                    <div className="dash-card dash-card-light" />
                   </div>
                 </div>
               </div>
             </article>
-
-            <article className="bento-item small">
-              <h3>100% Accessible</h3>
-              <p>WCAG 2.2 compliant.</p>
-            </article>
           </div>
         </section>
       </main>
+
+      <footer className="landing-footer landing-footer-light">
+        <img
+          src={logoImage}
+          alt="JustWav3"
+          className="landing-footer-logo"
+          width={154}
+          height={44}
+        />
+      </footer>
     </div>
   );
 }

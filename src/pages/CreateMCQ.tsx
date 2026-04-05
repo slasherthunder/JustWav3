@@ -7,6 +7,8 @@ import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, getDoc
 import { db } from '../firebase/config';
 import { createAssignment, notifyStudentsOfAssignment } from '../utils/assignments';
 import type { AssignmentSettings } from '../types/assignments';
+import './Home.css';
+import './Landing.css';
 import './CreateMCQ.css';
 
 interface Connection {
@@ -587,44 +589,57 @@ export function CreateMCQ() {
     visible: { opacity: 1, y: 0 },
   };
 
+  const themeBg = '#f8fafc';
+
   return (
     <motion.div
-      className="create-mcq-container"
+      className="create-mcq-container landing-wrapper brand-bg-light learn-page-brand"
       initial="hidden"
       animate="visible"
       variants={containerVariants}
     >
-      <motion.header className="create-mcq-header" variants={itemVariants}>
-        <motion.h1
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-        >
-          Create MCQ Practice 📝
-        </motion.h1>
-        <div className="header-actions">
+      <motion.nav
+        className="glass-nav glass-nav-light learn-top-nav"
+        role="navigation"
+        aria-label="Create MCQ"
+        variants={itemVariants}
+      >
+        <div className="create-mcq-nav-brand">
+          <span className="landing-badge-cyan learn-heading-badge">Create</span>
+          <span className="create-mcq-nav-title">MCQ practice set</span>
+        </div>
+        <div className="nav-actions learn-nav-actions create-mcq-nav-actions">
           <motion.button
+            type="button"
             onClick={exportToCSV}
-            className="export-button"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            className="btn-outline-dark-lg"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             aria-label="Export to CSV"
           >
-            📥 Export CSV
+            Export CSV
           </motion.button>
           <motion.button
+            type="button"
             onClick={handleBack}
-            className="back-button"
+            className="btn-ghost-dark"
             aria-label="Go back to home"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            Back to Home
+            ← Back
           </motion.button>
         </div>
-      </motion.header>
+      </motion.nav>
 
-      <main className="create-mcq-main">
+      <main
+        id="main-content"
+        className="create-mcq-main learn-main--landing"
+        role="main"
+        style={{
+          background: `linear-gradient(180deg, ${themeBg} 0%, #f1f5f9 45%, #e2e8f0 100%)`,
+        }}
+      >
         {error && (
           <motion.div
             className="error-message"
@@ -649,15 +664,19 @@ export function CreateMCQ() {
           {/* Preview Section */}
           <motion.div className="preview-section" variants={itemVariants}>
             <div className="preview-header">
-              <h2>Preview</h2>
+              <div className="create-mcq-section-title">
+                <span className="landing-badge-cyan create-mcq-heading-badge">Preview</span>
+                <span className="learn-content-heading__title">Current question</span>
+              </div>
               <motion.button
+                type="button"
                 onClick={() => handleDeleteSlide(currentSlideIndex)}
                 className="delete-slide-button"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 disabled={slides.length === 1}
               >
-                🗑️ Delete
+                Delete
               </motion.button>
             </div>
 
@@ -720,7 +739,10 @@ export function CreateMCQ() {
 
           {/* Edit Section */}
           <motion.div className="edit-section" variants={itemVariants}>
-            <h2>Edit Set</h2>
+            <div className="create-mcq-section-title">
+              <span className="landing-badge-cyan create-mcq-heading-badge">Edit</span>
+              <span className="learn-content-heading__title">Question & options</span>
+            </div>
             <form onSubmit={handleSubmit} className="edit-form">
               {/* Set Title */}
               <div className="form-group">
@@ -905,19 +927,19 @@ export function CreateMCQ() {
               <div className="button-group">
                 <motion.button
                   type="submit"
-                  className="submit-button"
+                  className="btn-cyan-solid-lg"
                   disabled={isSaving}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: isSaving ? 1 : 1.02 }}
+                  whileTap={{ scale: isSaving ? 1 : 0.98 }}
                 >
-                  {isSaving ? 'Saving...' : '💾 Save Set'}
+                  {isSaving ? 'Saving…' : 'Save set'}
                 </motion.button>
                 <motion.button
                   type="button"
                   onClick={handleBack}
-                  className="cancel-button"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  className="btn-outline-dark-lg"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   Cancel
                 </motion.button>
@@ -1054,12 +1076,12 @@ export function CreateMCQ() {
                           <motion.button
                             type="button"
                             onClick={handleCreateAssignment}
-                            className="submit-button"
+                            className="btn-cyan-solid-lg"
                             disabled={selectedStudentIds.length === 0 || !dueDate || isSaving}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                            whileHover={{ scale: selectedStudentIds.length === 0 || !dueDate || isSaving ? 1 : 1.02 }}
+                            whileTap={{ scale: selectedStudentIds.length === 0 || !dueDate || isSaving ? 1 : 0.98 }}
                           >
-                            {isSaving ? 'Creating...' : '📤 Assign Assignment'}
+                            {isSaving ? 'Creating…' : 'Assign to students'}
                           </motion.button>
                           <motion.button
                             type="button"
@@ -1067,11 +1089,11 @@ export function CreateMCQ() {
                               setNavigating(true);
                               navigate('/home');
                             }}
-                            className="cancel-button"
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                            className="btn-outline-dark-lg"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                           >
-                            Skip & Go to Home
+                            Skip & go home
                           </motion.button>
                         </div>
                       </>

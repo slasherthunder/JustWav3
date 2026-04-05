@@ -1,9 +1,10 @@
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
+import './Landing.css';
 import './Learn.css';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import Webcam from 'react-webcam';
 import { Hands } from '@mediapipe/hands';
 import { Camera } from '@mediapipe/camera_utils';
@@ -13,9 +14,18 @@ import { db } from '../firebase/config';
 import { BuddyButton } from '../components/BuddyButton';
 import { BuddyPracticeGame } from '../components/BuddyPracticeGame';
 import { BuddyHelpGuide } from '../components/BuddyHelpGuide';
-import threeFingersIcon from "../assets/images/three_fingers_up.png"
+import gestureIcon from "../assets/images/gestureicon.png";
+import audioIcon from "../assets/images/audioicon.png";
+import simplifyIcon from "../assets/images/simplifyimage.png";
+import iconsModeImage from "../assets/images/iconimage.png";
+import threeStickersIcon from "../assets/images/threestickers.png";
+import fourStickersIcon from "../assets/images/fourstickers.png";
+import fiveStickersIcon from "../assets/images/fivestickers.png";
+import sixStickersIcon from "../assets/images/sixstickers.png";
+import { AccessibleAnswer } from '../components/AccessibleAnswer';
+import { StickerProgress } from '../components/StickerProgress';
 
-type LearningMode = 'audio' | 'image' | 'icons' | 'gesture' | 'simple';
+type LearningMode = 'audio' | 'icons' | 'gesture' | 'simple';
 type GestureType = 'open' | 'fist' | 'point' | 'wave' | '1' | '2' | '3' | '4' | 'thumbsUp' | 'thumbsDown' | '-';
 
 interface ModeStats {
@@ -27,6 +37,22 @@ interface ModeStats {
   attempts: number;
   successes: number;
 }
+
+interface LearnAnswer {
+  letter: string;
+  value: string;
+}
+
+interface LearnQuestion {
+  text: string;
+  simplifiedText?: string;
+  hint?: string;
+  answers: LearnAnswer[];
+  correctAnswers: string[];
+}
+
+/** Cyan / slate anchors (aligned with Landing brand; scoped via .learn-page-brand) */
+const ANSWER_TILE_COLORS = ['#0891b2', '#0e7490', '#155e75', '#164e63'] as const;
 
 export function Learn() {
   const { setNavigating } = useNavigation();
@@ -70,27 +96,31 @@ export function Learn() {
   const [switchReason, setSwitchReason] = useState<string | null>(null); // Track reason for mode switch
   const [showSwitchTooltip, setShowSwitchTooltip] = useState<boolean>(false); // Show "Why am I seeing this?" tooltip
   
-  // Questions array
-  const questions = [
+  // Questions array (simplifiedText = shorter TTS / display for cognitive load)
+  const questions: LearnQuestion[] = [
     {
-      text: 'A teacher has 12 stickers and wants to share them evenly among 3 students. How many stickers will each student get?',
+      text: '12 stickers total → share evenly with 3 students → how many stickers does each student get?',
+      simplifiedText: '12 stickers. 3 friends. How many for each?',
+      hint: 'Try dividing 12 into 3 equal groups.',
       answers: [
         { letter: 'A', value: '3' },
         { letter: 'B', value: '4' },
         { letter: 'C', value: '5' },
         { letter: 'D', value: '6' }
       ],
-      correctAnswers: ['B'] // 12 / 3 = 4
+      correctAnswers: ['B']
     },
     {
       text: 'Which of the following are primary colors? (Select all that apply)',
+      simplifiedText: 'Which colors are primary colors? Pick all that are correct.',
+      hint: 'Primary colors mix to make other colors. Green and orange are mixed colors.',
       answers: [
         { letter: 'A', value: 'Red' },
         { letter: 'B', value: 'Green' },
         { letter: 'C', value: 'Blue' },
         { letter: 'D', value: 'Orange' }
       ],
-      correctAnswers: ['A', 'C'] // Red and Blue are primary colors
+      correctAnswers: ['A', 'C']
     }
   ];
   
@@ -100,56 +130,41 @@ export function Learn() {
   const [answerFeedback, setAnswerFeedback] = useState<string | null>(null);
   const [streak, setStreak] = useState(0); // Track consecutive correct answers
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  
-  // Simple content for audio/text modes - always the question text
-  const content = currentQuestion.text;
-  
-  // Difficulty-based theme colors (1 = soft pastels, 5 = bold pro colors)
-  const getDifficultyTheme = (diff: number) => {
-    const themes: Record<number, { primary: string; secondary: string; accent: string; text: string; border: string; background: string }> = {
-      1: { // Beginner - Soft pastels
-        primary: '#E8F5E9', // Light green
-        secondary: '#F3E5F5', // Light purple
-        accent: '#FFF9C4', // Light yellow
-        text: '#2E7D32', // Dark green
-        border: '#A5D6A7', // Pastel green
-        background: '#F1F8E9' // Very light green
-      },
-      2: { // Easy - Soft colors
-        primary: '#C8E6C9', // Medium green
-        secondary: '#E1BEE7', // Medium purple
-        accent: '#FFE082', // Medium yellow
-        text: '#388E3C', // Medium green
-        border: '#81C784', // Medium pastel green
-        background: '#E8F5E9' // Light green
-      },
-      3: { // Medium - Balanced colors
-        primary: '#A5D6A7', // Standard green
-        secondary: '#CE93D8', // Standard purple
-        accent: '#FFD54F', // Standard yellow
-        text: '#4CAF50', // Standard green
-        border: '#66BB6A', // Standard green
-        background: '#E8F5E9' // Light green
-      },
-      4: { // Hard - Bold colors
-        primary: '#81C784', // Bold green
-        secondary: '#BA68C8', // Bold purple
-        accent: '#FFC107', // Bold yellow
-        text: '#2E7D32', // Dark green
-        border: '#4CAF50', // Bold green
-        background: '#C8E6C9' // Medium green
-      },
-      5: { // Expert - Pro colors (deep blues/gold)
-        primary: '#1565C0', // Deep blue
-        secondary: '#6A1B9A', // Deep purple
-        accent: '#F57F17', // Gold
-        text: '#0D47A1', // Very dark blue
-        border: '#1976D2', // Deep blue
-        background: '#E3F2FD' // Light blue
+
+  /** Shorter copy for TTS and on-screen prompts (falls back to full text). */
+  const questionDisplayText = currentQuestion.simplifiedText ?? currentQuestion.text;
+  const content = questionDisplayText;
+
+  type LearnFlowStep = 'listen' | 'decide';
+  const [learnFlowStep, setLearnFlowStep] = useState<LearnFlowStep>('decide');
+  const [assistNarrow, setAssistNarrow] = useState(false);
+  const wrongByQuestionRef = useRef<Record<number, number>>({});
+
+  const displayedAnswers = useMemo(() => {
+    let list = currentQuestion.answers;
+    if (assistNarrow && currentQuestion.correctAnswers.length === 1) {
+      const correctLetter = currentQuestion.correctAnswers[0];
+      const wrongs = list.filter((a) => !currentQuestion.correctAnswers.includes(a.letter));
+      const oneWrong = wrongs[0];
+      if (oneWrong) {
+        list = list.filter((a) => a.letter === correctLetter || a.letter === oneWrong.letter);
       }
-    };
+    }
+    return list;
+  }, [currentQuestion, assistNarrow]);
+  
+  /** Cyan + slate glass, aligned with Landing (see .learn-page-brand in Learn.css) */
+  const getDifficultyTheme = (diff: number) => {
     const level = Math.max(1, Math.min(5, Math.round(diff))) as 1 | 2 | 3 | 4 | 5;
-    return themes[level] || themes[1];
+    const slate = ['#1e293b', '#1e293b', '#0f172a', '#0f172a', '#020617'][level - 1];
+    return {
+      primary: '#0891b2',
+      secondary: 'rgba(255, 255, 255, 0.88)',
+      accent: 'rgba(255, 255, 255, 0.78)',
+      text: slate,
+      border: '#e2e8f0',
+      background: '#f8fafc'
+    };
   };
   
   const theme = getDifficultyTheme(difficulty);
@@ -157,7 +172,6 @@ export function Learn() {
   // Mode statistics tracking
   const [modeStats, setModeStats] = useState<Record<LearningMode, ModeStats>>({
     audio: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
-    image: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
     icons: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
     gesture: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 },
     simple: { time: 0, interactions: 0, frustration: 0, accuracy: 0, responseTime: [], attempts: 0, successes: 0 }
@@ -567,6 +581,76 @@ export function Learn() {
     }
   }
 
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const playEarcon = useCallback((kind: 'tap' | 'success' | 'wrong') => {
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new AC();
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      const mk = (freq: number, dur: number, vol: number, when: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.value = vol;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(when);
+        osc.stop(when + dur);
+      };
+      if (kind === 'tap') mk(520, 0.04, 0.06, now);
+      else if (kind === 'success') {
+        mk(660, 0.08, 0.08, now);
+        mk(880, 0.1, 0.07, now + 0.06);
+      } else mk(220, 0.12, 0.05, now);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const speakQuestionAgain = useCallback(() => {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(questionDisplayText);
+    u.rate = 0.88;
+    speechSynthesis.speak(u);
+  }, [questionDisplayText]);
+
+  // Icons / Simple: start on "listen" so question is read before choices appear
+  useEffect(() => {
+    if (currentMode === 'icons' || currentMode === 'simple') {
+      setLearnFlowStep('listen');
+      setAssistNarrow(false);
+    } else {
+      setLearnFlowStep('decide');
+    }
+  }, [currentMode, currentQuestionIndex]);
+
+  useEffect(() => {
+    if (currentMode !== 'icons' && currentMode !== 'simple') return;
+    if (learnFlowStep !== 'listen') return;
+    if (buddyMode === 'try-me') {
+      setLearnFlowStep('decide');
+      return;
+    }
+    let cancelled = false;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(questionDisplayText);
+    u.rate = 0.88;
+    u.onend = () => {
+      if (!cancelled) setLearnFlowStep('decide');
+    };
+    u.onerror = () => {
+      if (!cancelled) setLearnFlowStep('decide');
+    };
+    speechSynthesis.speak(u);
+    return () => {
+      cancelled = true;
+      speechSynthesis.cancel();
+    };
+  }, [learnFlowStep, currentMode, currentQuestionIndex, questionDisplayText, buddyMode]);
+
   // Adaptive difficulty adjustment based on performance
   useEffect(() => {
     if (attempts < 3) return; // Need minimum attempts to assess
@@ -758,11 +842,19 @@ export function Learn() {
       alert(explanation);
       return;
     }
+    if ((currentMode === 'icons' || currentMode === 'simple') && learnFlowStep === 'listen') {
+      return;
+    }
+    playEarcon('tap');
     // Always set the selected answer first so it's visually selected
     setSelectedAnswer(answer);
     const isCorrect = currentQuestion.correctAnswers.includes(answer);
     
     if (isCorrect) {
+      playEarcon('success');
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(25);
+      }
       // Increment streak for correct answers
       setStreak((prev) => prev + 1);
       recordSuccess();
@@ -782,12 +874,16 @@ export function Learn() {
       }, 5000);
       // Keep selectedAnswer visible so user can see their correct choice continuously
     } else {
+      playEarcon('wrong');
       // Reset streak on incorrect answer
       setStreak(0);
-      // Wrong answer - alert and encourage to try again
       setAttempts((a) => a + 1);
+      const idx = currentQuestionIndex;
+      wrongByQuestionRef.current[idx] = (wrongByQuestionRef.current[idx] || 0) + 1;
+      if (wrongByQuestionRef.current[idx] >= 2) {
+        setAssistNarrow(true);
+      }
       setAnswerFeedback(`❌ Not quite. Try again!`);
-      alert('Try again! You can do it!');
       speakText('Try again! You can do it!');
       
       // Update mode stats
@@ -813,7 +909,20 @@ export function Learn() {
         setAnswerFeedback(null);
       }, 2000);
     }
-  }, [currentMode, modeStart, recordSuccess]);
+  }, [
+    buddyMode,
+    currentMode,
+    learnFlowStep,
+    currentQuestion,
+    currentQuestionIndex,
+    modeStart,
+    playEarcon,
+    recordSuccess,
+    speakText
+  ]);
+
+  const handleAnswerSelectionRef = useRef(handleAnswerSelection);
+  handleAnswerSelectionRef.current = handleAnswerSelection;
 
   const showCheckInAfterDelay = useCallback(() => {
     setTimeout(() => {
@@ -876,7 +985,7 @@ export function Learn() {
       };
       
       // Generate profile with updated stats
-      const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+      const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
       const sortedByInteractions = [...modes].sort((a, b) => 
         updatedStats[b].interactions - updatedStats[a].interactions
       );
@@ -1020,17 +1129,6 @@ export function Learn() {
             attempts: stats.audio.attempts,
             successes: stats.audio.successes
           },
-          image: {
-            timeSpent: stats.image.time,
-            interactions: stats.image.interactions,
-            frustration: stats.image.frustration,
-            accuracy: stats.image.accuracy,
-            averageResponseTime: stats.image.responseTime.length > 0 
-              ? stats.image.responseTime.reduce((a, b) => a + b, 0) / stats.image.responseTime.length 
-              : 0,
-            attempts: stats.image.attempts,
-            successes: stats.image.successes
-          },
           icons: {
             timeSpent: stats.icons.time,
             interactions: stats.icons.interactions,
@@ -1150,12 +1248,12 @@ export function Learn() {
       const profileRef = doc(db, 'users', currentUser.uid, 'learningProfile', 'current');
       const existingProfile = await getDoc(profileRef);
       
-      const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+      const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
       const totalTime = Object.values(stats).reduce((sum, s) => sum + s.time, 0);
       const sessionAccuracy = totalAttempts > 0 ? (totalSuccesses / totalAttempts) * 100 : 0;
       
       // Calculate learning style trends
-      const visualModes = ['image', 'icons'];
+      const visualModes = ['icons'];
       const auditoryModes = ['audio'];
       const kinestheticModes = ['gesture'];
       
@@ -1288,13 +1386,18 @@ export function Learn() {
           return;
         }
         
-        // Set overlay canvas size to match video
+        // Set overlay and main canvas size to match video (both are used for drawing)
         function updateCanvasSize() {
           if (video && overlayCanvas && mounted) {
             const width = video.videoWidth || 640;
             const height = video.videoHeight || 480;
             overlayCanvas.width = width;
             overlayCanvas.height = height;
+            const mainCanvas = canvasRef.current;
+            if (mainCanvas) {
+              mainCanvas.width = width;
+              mainCanvas.height = height;
+            }
           }
         }
         
@@ -1305,7 +1408,7 @@ export function Learn() {
         // Initialize MediaPipe Hands
         const hands = new Hands({
           locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
           }
         });
 
@@ -1510,16 +1613,16 @@ export function Learn() {
                   const actions: Partial<Record<GestureType, () => void>> = {
                     // Answer selection gestures (1-4 fingers = A, B, C, D)
                     '1': () => {
-                      handleAnswerSelection('A');
+                      handleAnswerSelectionRef.current('A');
                     },
                     '2': () => {
-                      handleAnswerSelection('B');
+                      handleAnswerSelectionRef.current('B');
                     },
                     '3': () => {
-                      handleAnswerSelection('C');
+                      handleAnswerSelectionRef.current('C');
                     },
                     '4': () => {
-                      handleAnswerSelection('D');
+                      handleAnswerSelectionRef.current('D');
                     },
                     // Navigation and feedback gestures
                     thumbsUp: () => {
@@ -1642,7 +1745,7 @@ export function Learn() {
     
     // If frustration is high (>= 3) and accuracy is low (< 50%), suggest switching
     if (currentFrustration >= 3 && currentAccuracy < 50 && modeStats[currentMode].attempts >= 3) {
-      const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+      const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
       const bestAlternative = modes
         .filter(m => m !== currentMode)
         .sort((a, b) => {
@@ -1667,7 +1770,7 @@ export function Learn() {
   
   // Generate learning profile
   const generateProfile = () => {
-    const modes: LearningMode[] = ['audio', 'image', 'icons', 'gesture', 'simple'];
+    const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
     const sortedByInteractions = [...modes].sort((a, b) => 
       modeStats[b].interactions - modeStats[a].interactions
     );
@@ -1710,7 +1813,7 @@ export function Learn() {
 
   return (
     <motion.div 
-      className="learn-container" 
+      className="learn-container landing-wrapper brand-bg-light learn-page-brand" 
       initial="hidden" 
       animate="visible" 
       variants={containerVariants}
@@ -1777,24 +1880,33 @@ export function Learn() {
           : ''}
       </div>
       
-      <motion.header className="learn-header" role="banner" variants={itemVariants}>
-        <motion.h1 
-          initial={{ scale: 0.95, opacity: 0 }} 
-          animate={{ scale: 1, opacity: 1 }} 
-          transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-        >
-          Adaptive Learning 📚
-        </motion.h1>
+      <motion.nav
+        className="glass-nav glass-nav-light learn-top-nav"
+        role="navigation"
+        aria-label="Learning session"
+        variants={itemVariants}
+      >
         <motion.button
+          type="button"
           onClick={goBack}
-          className="logout-button"
+          className="btn-ghost-dark"
           aria-label="Go back to home"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
         >
-          Back to Home
+          ← Back
         </motion.button>
-      </motion.header>
+        <div className="nav-actions learn-nav-actions">
+          <span id="learn-nav-progress-label" className="visually-hidden">
+            Question progress
+          </span>
+          <StickerProgress
+            total={questions.length}
+            currentIndex={currentQuestionIndex}
+            labelId="learn-nav-progress-label"
+          />
+        </div>
+      </motion.nav>
 
       {sessionOver && profile && (
         <motion.div 
@@ -1832,8 +1944,8 @@ export function Learn() {
         </motion.div>
       )}
 
-      <main id="main-content" className="learn-main" role="main" style={{
-        backgroundColor: theme.background,
+      <main id="main-content" className="learn-main learn-main--landing" role="main" style={{
+        background: `linear-gradient(180deg, ${theme.background} 0%, #f1f5f9 45%, #e2e8f0 100%)`,
         transition: 'background-color 0.5s ease'
       }}>
         {mpStatus === 'error' && (
@@ -1843,7 +1955,10 @@ export function Learn() {
             animate={{ opacity: 1, y: 0 }}
           >
             <h3>⚠️ MediaPipe Loading Error</h3>
-            <p>Failed to load MediaPipe Hands. Please refresh the page or check your internet connection.</p>
+            <p>
+              {errorMessage ||
+                'Failed to load MediaPipe Hands. Please refresh the page or check your internet connection.'}
+            </p>
             <button className="logout-button" onClick={() => window.location.reload()}>
               Refresh Page
             </button>
@@ -1852,12 +1967,14 @@ export function Learn() {
         
         <div className="learn-panes">
           {/* Left Pane: Gesture & Interaction */}
-          <motion.div className="learn-pane gesture-pane" variants={cardVariants} style={{
-            backgroundColor: theme.accent,
+          <motion.div className="learn-pane gesture-pane learn-pane--glass" variants={cardVariants} style={{
             borderColor: theme.border,
             transition: 'background-color 0.5s ease, border-color 0.5s ease'
           }}>
-            <h2 style={{ color: theme.text }}>👋 Gesture & Interaction</h2>
+            <h2 className="learn-pane-title" style={{ color: theme.text, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <img src={gestureIcon} alt="" className="learn-pane-heading-icon" width={28} height={28} />
+              Gesture & Interaction
+            </h2>
             
             {mpStatus === 'loading' && (
               <div className="loading-message">
@@ -1870,48 +1987,59 @@ export function Learn() {
             
             {currentMode !== 'gesture' && (
             <div className="webcam-section">
-              <div className="webcam-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
-                <Webcam
-                  ref={webcamRef}
-                  audio={false}
-                  onUserMedia={() => setMediaReady(true)}
-                onUserMediaError={(error) => {
-                  console.error('Webcam error:', error);
-                  const err = error instanceof DOMException ? error : null;
-                  const errorMsg = err?.name === 'NotAllowedError' 
-                    ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
-                    : err?.name === 'NotFoundError'
-                    ? 'No camera found. Please connect a camera and refresh.'
-                    : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
-                  setErrorMessage(errorMsg);
-                  setDetectStatus('error');
-                }}
-                  videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
-                className="webcam-feed"
-                />
-                <canvas 
-                  ref={overlayCanvasRef} 
-                  className="ghost-hand-overlay"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    pointerEvents: 'none',
-                    borderRadius: '12px'
+              {/* Video stays mounted for MediaPipe; hidden from view to reduce mirror distraction */}
+              <div className="gesture-engine-container" aria-hidden="true">
+                <div
+                  className="webcam-wrapper"
+                  style={{ position: 'relative', display: 'inline-block' }}
+                >
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    onUserMedia={() => setMediaReady(true)}
+                  onUserMediaError={(error) => {
+                    console.error('Webcam error:', error);
+                    const err = error instanceof DOMException ? error : null;
+                    const errorMsg = err?.name === 'NotAllowedError' 
+                      ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
+                      : err?.name === 'NotFoundError'
+                      ? 'No camera found. Please connect a camera and refresh.'
+                      : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
+                    setErrorMessage(errorMsg);
+                    setDetectStatus('error');
                   }}
+                    videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
+                  className="webcam-feed"
+                  />
+                  <canvas 
+                    ref={overlayCanvasRef} 
+                    className="ghost-hand-overlay"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none',
+                      borderRadius: '12px'
+                    }}
+                  />
+                </div>
+                <canvas 
+                  ref={canvasRef} 
+                  className="gesture-canvas"
                 />
               </div>
-              <canvas 
-                ref={canvasRef} 
-                className="gesture-canvas"
-              />
               <div className="detection-status">
                 <span className={`status-indicator ${detectStatus === 'ready' ? 'ready' : detectStatus === 'error' ? 'error' : ''}`}>
                   {detectStatus === 'ready' ? '●' : detectStatus === 'error' ? '✗' : '○'}
                 </span>
                 {detectStatus === 'ready' ? 'Camera Ready' : detectStatus === 'error' ? 'Error' : 'Initializing...'}
+                {detectStatus === 'ready' && (
+                  <span className="hand-indicator-badge" title="Camera is on for gestures">
+                    ✋ Hand camera on
+                  </span>
+                )}
               </div>
               {detectStatus === 'error' && errorMessage && (
                 <div className="error-detail">
@@ -1975,7 +2103,7 @@ export function Learn() {
                 <div className="gesture-icon">
                   {gesture === '1' && '1️⃣'}
                   {gesture === '2' && '2️⃣'}
-                  {gesture === '3' && <img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px', display: 'inline-block' }} />}
+                  {gesture === '3' && <img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} />}
                   {gesture === '4' && '4️⃣'}
                   {gesture === 'thumbsUp' && '👍'}
                   {gesture === 'thumbsDown' && '👎'}
@@ -2038,7 +2166,7 @@ export function Learn() {
                     <span>2 Fingers = Answer B</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon"><img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                    <span className="guide-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
                     <span>3 Fingers = Answer C</span>
                   </div>
                   <div className="guide-item">
@@ -2084,8 +2212,11 @@ export function Learn() {
           </motion.div>
 
           {/* Right Pane: Adaptive Learning */}
-          <motion.div className="learn-pane learning-pane" variants={cardVariants}>
-            <h2>📖 Adaptive Learning Content</h2>
+          <motion.div className="learn-pane learning-pane learn-pane--glass" variants={cardVariants}>
+            <h2 id="learn-progress-heading" className="learn-content-heading">
+              <span className="landing-badge-cyan learn-heading-badge">Learn</span>
+              <span className="learn-content-heading__title">Adaptive Learning</span>
+            </h2>
             
             {/* Switch reason tooltip */}
             {showSwitchTooltip && switchReason && (
@@ -2139,31 +2270,29 @@ export function Learn() {
                   className={`mode-button ${currentMode === 'audio' ? 'active' : ''}`}
                   onClick={() => changeMode('audio')}
                 >
-                  🔊 Audio
-                </button>
-                <button 
-                  className={`mode-button ${currentMode === 'image' ? 'active' : ''}`}
-                  onClick={() => changeMode('image')}
-                >
-                  🖼️ Image
+                  <img src={audioIcon} alt="" className="mode-button-img" width={28} height={28} />
+                  Audio
                 </button>
                 <button 
                   className={`mode-button ${currentMode === 'icons' ? 'active' : ''}`}
                   onClick={() => changeMode('icons')}
                 >
-                  🎨 Icons
+                  <img src={iconsModeImage} alt="" className="mode-button-img" width={28} height={28} />
+                  Icons
                 </button>
                 <button 
                   className={`mode-button ${currentMode === 'gesture' ? 'active' : ''}`}
                   onClick={() => changeMode('gesture')}
                 >
-                  👋 Gesture
+                  <img src={gestureIcon} alt="" className="mode-button-img" width={28} height={28} />
+                  Gesture
                 </button>
                 <button 
                   className={`mode-button ${currentMode === 'simple' ? 'active' : ''}`}
                   onClick={() => changeMode('simple')}
                 >
-                  📝 Simple
+                  <img src={simplifyIcon} alt="" className="mode-button-img" width={28} height={28} />
+                  Simple
                 </button>
             </div>
             </div>
@@ -2171,11 +2300,30 @@ export function Learn() {
             <div className="content-display">
               <div className="mode-indicator">
                 <span className="mode-indicator-badge">
-                  {currentMode === 'audio' && '🔊 Audio Mode'}
-                  {currentMode === 'image' && '🖼️ Visual Mode'}
-                  {currentMode === 'icons' && '🎨 Interactive Mode'}
-                  {currentMode === 'gesture' && '👋 Gesture Mode'}
-                  {currentMode === 'simple' && '📝 Simple Mode'}
+                  {currentMode === 'audio' && (
+                    <>
+                      <img src={audioIcon} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Audio Mode</span>
+                    </>
+                  )}
+                  {currentMode === 'icons' && (
+                    <>
+                      <img src={iconsModeImage} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Interactive Mode</span>
+                    </>
+                  )}
+                  {currentMode === 'gesture' && (
+                    <>
+                      <img src={gestureIcon} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Gesture Mode</span>
+                    </>
+                  )}
+                  {currentMode === 'simple' && (
+                    <>
+                      <img src={simplifyIcon} alt="" className="mode-indicator-icon" width={16} height={16} />
+                      <span>Simple Mode</span>
+                    </>
+                  )}
                 </span>
               </div>
               
@@ -2186,39 +2334,36 @@ export function Learn() {
                   animate={{ opacity: 1, x: 0 }}
                 >
                   <div className="audio-mode">
-                    <div className="mode-icon-large">🔊</div>
+                    <div className="mode-icon-large" aria-hidden>
+                      <img src={audioIcon} alt="" className="mode-icon-large-img" width={64} height={64} />
+                    </div>
                     <div className="content-card">
                       <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
-                        {currentQuestion.text}
+                        {questionDisplayText}
                       </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans) => {
+                      {currentQuestion.hint && (
+                        <p className="content-hint" style={{ fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      <div className="answer-choices answer-choices--accessible" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        {currentQuestion.answers.map((ans, idx) => {
                           const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
                           const isSelected = selectedAnswer === ans.letter;
-                          // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers, show all correct answers in green only when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          const showAsCorrect = isSelected && isCorrect || (Boolean(selectedAnswer) && isCorrect && currentQuestion.correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
+                          const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
                           
                           return (
-                          <div
+                          <AccessibleAnswer
                             key={ans.letter}
-                            className={`answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
-                            style={{
-                              padding: 'var(--spacing-md)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              cursor: 'pointer',
-                              fontWeight: isSelected ? 600 : 400
-                            }}
+                            letter={ans.letter}
+                            value={ans.value}
+                            color={ANSWER_TILE_COLORS[idx % ANSWER_TILE_COLORS.length]}
+                            isSelected={!!isSelected}
+                            state={tileState}
                             onClick={() => handleAnswerSelection(ans.letter)}
-                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
-                            onMouseLeave={() => setHoveredElement(null)}
-                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
-                          >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
+                          />
                           );
                         })}
                       </div>
@@ -2239,69 +2384,6 @@ export function Learn() {
                     <div className="mode-info-card">
                       <p className="mode-description">
                         💡 <strong>Tip:</strong> Listen to the question being read aloud. Use gestures: 1 finger = A, 2 = B, 3 = C, 4 = D
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-            {currentMode === 'image' && (
-                <motion.div 
-                  className="mode-content"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                >
-                  <div className="image-mode">
-                    <div className="visual-explanation">
-                      <div className="visual-icons" style={{ fontSize: '2rem' }}>
-                        🎁 → 👥 → 📊
-              </div>
-                      <p className="visual-caption">Stickers Sharing Visual</p>
-                    </div>
-                    <div className="content-card">
-                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
-                        {currentQuestion.text}
-                      </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans) => {
-                          const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
-                          const isSelected = selectedAnswer === ans.letter;
-                          // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers, show all correct answers in green only when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
-                          const showAsIncorrect = isSelected && !isCorrect;
-                          
-                          return (
-                          <div
-                            key={ans.letter}
-                            className={`answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
-                            style={{
-                              padding: 'var(--spacing-md)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              cursor: 'pointer',
-                              fontWeight: isSelected ? 600 : 400
-                            }}
-                            onClick={() => handleAnswerSelection(ans.letter)}
-                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
-                            onMouseLeave={() => setHoveredElement(null)}
-                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
-                          >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
-                          );
-                        })}
-                      </div>
-                      {answerFeedback && (
-                        <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
-                          {answerFeedback}
-              </div>
-            )}
-                    </div>
-                    <div className="mode-info-card">
-                      <p className="mode-description">
-                        💡 <strong>Tip:</strong> Visualize the problem! 12 stickers ÷ 3 students = ?
                       </p>
                     </div>
                   </div>
@@ -2339,50 +2421,79 @@ export function Learn() {
                       transition: 'background-color 0.5s ease, border-color 0.5s ease'
                     }}>
                       <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, color: theme.text }}>
-                        {currentQuestion.text}
+                        {questionDisplayText}
                       </p>
-                      <div className="answer-choices" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans) => {
+                      {currentQuestion.hint && (
+                        <p style={{ fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-md)', color: theme.text, opacity: 0.85 }}>
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      <AnimatePresence mode="wait">
+                        {learnFlowStep === 'listen' && (
+                          <motion.div
+                            key="listen"
+                            className="learn-listen-panel"
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.25 }}
+                          >
+                            <p className="learn-listen-panel__title" style={{ color: theme.text, fontWeight: 700, fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
+                              Listen to the question…
+                            </p>
+                            <div className="learn-listen-panel__actions">
+                              <button type="button" className="play-button" onClick={speakQuestionAgain}>
+                                <span className="play-icon">🔊</span>
+                                <span>Speak again</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="logout-button learn-ready-btn"
+                                onClick={() => setLearnFlowStep('decide')}
+                              >
+                                I’m ready to answer
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      {assistNarrow && (
+                        <p className="assist-narrow-notice" style={{ marginBottom: 'var(--spacing-md)', fontWeight: 600, color: theme.text }}>
+                          Showing two choices to make it easier.
+                        </p>
+                      )}
+                      {learnFlowStep === 'decide' && (
+                      <div className="answer-choices answer-choices--accessible answer-choices--icons-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-md)' }}>
+                        {displayedAnswers.map((ans) => {
+                          const idx = currentQuestion.answers.findIndex((a) => a.letter === ans.letter);
+                          const colorIdx = idx >= 0 ? idx : 0;
                           const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
                           const isSelected = selectedAnswer === ans.letter;
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          const showAsCorrect = isSelected && isCorrect || (Boolean(selectedAnswer) && isCorrect && currentQuestion.correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
-                          
+                          const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
+                          const stickerImg =
+                            ans.letter === 'A' ? threeStickersIcon
+                            : ans.letter === 'B' ? fourStickersIcon
+                            : ans.letter === 'C' ? fiveStickersIcon
+                            : sixStickersIcon;
                           return (
-                          <motion.button
+                          <AccessibleAnswer
                             key={ans.letter}
-                            className={`icon-button answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
+                            letter={ans.letter}
+                            value={ans.value}
+                            color={ANSWER_TILE_COLORS[colorIdx % ANSWER_TILE_COLORS.length]}
+                            isSelected={!!isSelected}
+                            state={tileState}
                             onClick={() => handleAnswerSelection(ans.letter)}
-                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
-                            onMouseLeave={() => setHoveredElement(null)}
-                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
-                            whileHover={{ scale: 1.05, y: -2 }}
-                            whileTap={{ scale: 0.95 }}
-                            style={{
-                              padding: 'var(--spacing-lg)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              fontWeight: isSelected ? 600 : 400,
-                              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))'
-                            }}
-                          >
-                            <span className="icon-emoji" style={{ fontSize: '2rem' }}>
-                              {ans.letter === 'A' ? (
-                                <img src="https://api.arasaac.org/api/pictograms/1?download=false" alt="One" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} onError={(e) => { e.currentTarget.src = 'https://sclera.be/resources/pictos/sclera/1.png'; }} />
-                              ) : ans.letter === 'B' ? (
-                                <img src="https://api.arasaac.org/api/pictograms/2?download=false" alt="Two" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} onError={(e) => { e.currentTarget.src = 'https://sclera.be/resources/pictos/sclera/2.png'; }} />
-                              ) : ans.letter === 'C' ? (
-                                <img src={threeFingersIcon} alt="Three fingers" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} />
-                              ) : (
-                                <img src="https://api.arasaac.org/api/pictograms/4?download=false" alt="Four" style={{ width: '48px', height: '48px', display: 'inline-block', verticalAlign: 'middle' }} onError={(e) => { e.currentTarget.src = 'https://sclera.be/resources/pictos/sclera/4.png'; }} />
-                              )}
-                            </span>
-                            <span className="icon-text"><strong>{ans.letter})</strong> {ans.value}</span>
-                          </motion.button>
+                            visual={
+                              <img src={stickerImg} alt="" className="icons-mode-sticker-img" width={128} height={128} />
+                            }
+                          />
                           );
                         })}
                 </div>
+                      )}
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
                           {answerFeedback}
@@ -2425,49 +2536,57 @@ export function Learn() {
                         {streak >= 3 ? '🔥' : '⭐'} {streak} {streak === 1 ? 'Streak' : 'Streak'}!
                       </div>
                     )}
-                    {/* Webcam moved to center-top */}
+                    {/* Webcam feed hidden; simple status only (reduces mirror-watching) */}
                     <div className="webcam-section gesture-mode-webcam" style={{ 
                       width: '100%', 
                       display: 'flex', 
-                      justifyContent: 'center', 
+                      flexDirection: 'column',
+                      alignItems: 'center',
                       marginBottom: 'var(--spacing-lg)',
                       order: -1
                     }}>
-                      <div className="webcam-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
-                        <Webcam
-                          ref={webcamRef}
-                          audio={false}
-                          onUserMedia={() => setMediaReady(true)}
-                        onUserMediaError={(error) => {
-                          console.error('Webcam error:', error);
-                          const err = error instanceof DOMException ? error : null;
-                          const errorMsg = err?.name === 'NotAllowedError' 
-                            ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
-                            : err?.name === 'NotFoundError'
-                            ? 'No camera found. Please connect a camera and refresh.'
-                            : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
-                          setErrorMessage(errorMsg);
-                          setDetectStatus('error');
-                        }}
-                          videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
-                        className="webcam-feed"
-                        />
-                        <canvas 
-                          ref={overlayCanvasRef} 
-                          className="ghost-hand-overlay"
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            pointerEvents: 'none',
-                            borderRadius: '12px'
+                      <div className="gesture-engine-container" aria-hidden="true">
+                        <div className="webcam-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
+                          <Webcam
+                            ref={webcamRef}
+                            audio={false}
+                            onUserMedia={() => setMediaReady(true)}
+                          onUserMediaError={(error) => {
+                            console.error('Webcam error:', error);
+                            const err = error instanceof DOMException ? error : null;
+                            const errorMsg = err?.name === 'NotAllowedError' 
+                              ? 'Camera permission denied. Please allow camera access in Safari Settings > Websites > Camera.'
+                              : err?.name === 'NotFoundError'
+                              ? 'No camera found. Please connect a camera and refresh.'
+                              : `Camera error: ${err?.message || err?.name || String(error)}. Check Safari Settings > Websites > Camera.`;
+                            setErrorMessage(errorMsg);
+                            setDetectStatus('error');
                           }}
+                            videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
+                          className="webcam-feed"
+                          />
+                          <canvas 
+                            ref={overlayCanvasRef} 
+                            className="ghost-hand-overlay"
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              pointerEvents: 'none',
+                              borderRadius: '12px'
+                            }}
+                          />
+                        </div>
+                        <canvas
+                          ref={canvasRef}
+                          className="gesture-canvas"
+                          aria-hidden={true}
                         />
                       </div>
                     </div>
-                    <div className="content-card" style={{
+                    <div className="content-card learn-content-card" style={{
                       backgroundColor: theme.secondary,
                       borderColor: theme.border,
                       transition: 'background-color 0.5s ease, border-color 0.5s ease'
@@ -2481,30 +2600,31 @@ export function Learn() {
                       transition: 'background-color 0.5s ease, border-color 0.5s ease'
                     }}>
                       <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, color: theme.text }}>
-                        {currentQuestion.text}
+                        {questionDisplayText}
                       </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {currentQuestion.answers.map((ans: any) => {
+                      {currentQuestion.hint && (
+                        <p style={{ fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-md)', color: theme.text, opacity: 0.9 }}>
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      <div className="answer-choices answer-choices--accessible" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        {currentQuestion.answers.map((ans, idx) => {
                           const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
                           const isSelected = selectedAnswer === ans.letter;
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          const showAsCorrect = isSelected && isCorrect || (Boolean(selectedAnswer) && isCorrect && currentQuestion.correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
+                          const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
                           
                           return (
-                          <div
+                          <AccessibleAnswer
                             key={ans.letter}
-                            className={`answer-choice ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
-                            style={{
-                              padding: 'var(--spacing-md)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              fontWeight: isSelected ? 600 : 400
-                            }}
+                            letter={ans.letter}
+                            value={ans.value}
+                            color={ANSWER_TILE_COLORS[idx % ANSWER_TILE_COLORS.length]}
+                            isSelected={!!isSelected}
+                            state={tileState}
                             onClick={() => handleAnswerSelection(ans.letter)}
-                          >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
+                          />
                           );
                         })}
                       </div>
@@ -2532,7 +2652,7 @@ export function Learn() {
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon"><img src={threeFingersIcon} alt="3 fingers" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                          <span className="instruction-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
                           <div>
                             <strong>3 Fingers</strong>
                             <span className="instruction-desc">Answer C</span>
@@ -2596,27 +2716,122 @@ export function Learn() {
                       </div>
                     )}
                     <div className="content-card simplified">
-                      <p className="simple-text" style={{ fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 700, lineHeight: '1.8', color: '#000000' }}>
-                        {currentQuestion.text}
+                      {currentQuestionIndex === 0 && (
+                        <div className="simple-mode-sticker-strip" aria-hidden={true}>
+                          <div className="simple-mode-sticker-strip__item">
+                            <img src={threeStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
+                            <span className="simple-mode-sticker-strip__label">A · 3</span>
+                          </div>
+                          <div className="simple-mode-sticker-strip__item">
+                            <img src={fourStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
+                            <span className="simple-mode-sticker-strip__label">B · 4</span>
+                          </div>
+                          <div className="simple-mode-sticker-strip__item">
+                            <img src={fiveStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
+                            <span className="simple-mode-sticker-strip__label">C · 5</span>
+                          </div>
+                          <div className="simple-mode-sticker-strip__item">
+                            <img src={sixStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
+                            <span className="simple-mode-sticker-strip__label">D · 6</span>
+                          </div>
+                        </div>
+                      )}
+                      <p
+                        className="simple-text"
+                        style={{
+                          fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier))',
+                          marginBottom: 'var(--spacing-lg)',
+                          fontWeight: 700,
+                          lineHeight: 1.55,
+                          color: '#000000',
+                          whiteSpace: 'pre-line'
+                        }}
+                      >
+                        {questionDisplayText}
                       </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', width: '100%' }}>
-                        {currentQuestion.answers.map((ans: any) => {
+                      {currentQuestion.hint && (
+                        <p style={{ marginBottom: 'var(--spacing-md)', fontWeight: 600, color: '#000000' }}>
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      <AnimatePresence mode="wait">
+                        {learnFlowStep === 'listen' && (
+                          <motion.div
+                            key="listen-simple"
+                            className="learn-listen-panel"
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.25 }}
+                          >
+                            <p className="learn-listen-panel__title" style={{ fontWeight: 700, fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', color: '#000000' }}>
+                              Listen to the question…
+                            </p>
+                            <div className="learn-listen-panel__actions">
+                              <button type="button" className="play-button" onClick={speakQuestionAgain}>
+                                <span className="play-icon">🔊</span>
+                                <span>Speak again</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="logout-button learn-ready-btn"
+                                onClick={() => setLearnFlowStep('decide')}
+                              >
+                                I’m ready to answer
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      {assistNarrow && (
+                        <p style={{ marginBottom: 'var(--spacing-md)', fontWeight: 700, color: '#000000' }}>
+                          Showing two choices to make it easier.
+                        </p>
+                      )}
+                      {learnFlowStep === 'decide' && (
+                      <div className="answer-choices answer-choices--accessible" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', width: '100%' }}>
+                        {displayedAnswers.map((ans) => {
+                          const idx = currentQuestion.answers.findIndex((a) => a.letter === ans.letter);
+                          const colorIdx = idx >= 0 ? idx : 0;
                           const isCorrect = currentQuestion.correctAnswers.includes(ans.letter);
                           const isSelected = selectedAnswer === ans.letter;
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && currentQuestion.correctAnswers.length > 1);
+                          const showAsCorrect = isSelected && isCorrect || (Boolean(selectedAnswer) && isCorrect && currentQuestion.correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
+                          const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
+                          const stickerForSimple =
+                            ans.letter === 'A'
+                              ? threeStickersIcon
+                              : ans.letter === 'B'
+                                ? fourStickersIcon
+                                : ans.letter === 'C'
+                                  ? fiveStickersIcon
+                                  : sixStickersIcon;
                           
                           return (
-                          <div
+                          <AccessibleAnswer
                             key={ans.letter}
-                            className={`answer-choice ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
+                            letter={ans.letter}
+                            value={ans.value}
+                            color={ANSWER_TILE_COLORS[colorIdx % ANSWER_TILE_COLORS.length]}
+                            isSelected={!!isSelected}
+                            state={tileState}
                             onClick={() => handleAnswerSelection(ans.letter)}
-                          >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
+                            visual={
+                              currentQuestionIndex === 0 ? (
+                                <img
+                                  src={stickerForSimple}
+                                  alt=""
+                                  className="simple-mode-answer-sticker-img"
+                                  width={72}
+                                  height={72}
+                                />
+                              ) : undefined
+                            }
+                          />
                           );
                         })}
                       </div>
+                      )}
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 0, backgroundColor: '#FFFFFF', border: '4px solid #000000', color: '#000000', fontWeight: 700, fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
                           {answerFeedback}
@@ -2771,6 +2986,24 @@ export function Learn() {
           </motion.div>
         </div>
       </main>
+
+      {currentMode === 'gesture' && (
+        <div className="learn-gesture-floating-pill" role="status" aria-live="polite">
+          <span
+            className={
+              gesture !== '-'
+                ? 'landing-badge-cyan learn-gesture-pill--live'
+                : 'learn-gesture-pill-muted'
+            }
+          >
+            {gesture !== '-'
+              ? `Detecting: ${gesture}`
+              : detectStatus === 'ready'
+                ? 'Waiting for gesture…'
+                : 'Getting camera ready…'}
+          </span>
+        </div>
+      )}
     </motion.div>
   );
 }

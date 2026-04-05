@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -8,7 +9,14 @@ import { db } from '../firebase/config';
 import { setTTSProvider, getTTSProvider, setElevenLabsApiKey, getElevenLabsApiKey, speakText as ttsSpeakText, stopSpeaking as ttsStopSpeaking } from '../utils/ttsService';
 import { validateMessageInput, validateSearchQuery } from '../utils/validation';
 import './Home.css';
+import './Landing.css';
 import './Messages.css';
+import logoImage from '../assets/images/logo.png';
+import teacherProfileImage from '../assets/images/teacherprofile.png';
+import parentProfileImage from '../assets/images/parentprofile.png';
+import studentProfileImage from '../assets/images/studentprofile.png';
+import audioIcon from '../assets/images/audioicon.png';
+import { SimplifyIcon } from '../components/SimplifyIcon';
 
 declare global {
   interface Window {
@@ -2386,12 +2394,40 @@ export function Messages() {
     }
   };
 
-  const getRoleIcon = (role: 'student' | 'teacher' | 'parent') => {
+  const getRoleIcon = (role: 'student' | 'teacher' | 'parent'): ReactNode => {
     switch (role) {
-      case 'student': return '🎓';
-      case 'teacher': return '👩‍🏫';
-      case 'parent': return '👨‍👩‍👧‍👦';
-      default: return '👤';
+      case 'student':
+        return (
+          <img
+            src={studentProfileImage}
+            alt=""
+            className="role-icon-student-img"
+            width={22}
+            height={22}
+          />
+        );
+      case 'teacher':
+        return (
+          <img
+            src={teacherProfileImage}
+            alt=""
+            className="role-icon-teacher-img"
+            width={22}
+            height={22}
+          />
+        );
+      case 'parent':
+        return (
+          <img
+            src={parentProfileImage}
+            alt=""
+            className="role-icon-parent-img"
+            width={22}
+            height={22}
+          />
+        );
+      default:
+        return '👤';
     }
   };
 
@@ -3142,7 +3178,7 @@ export function Messages() {
       const target = event.target as HTMLElement;
       if (showAccessibilitySettings && 
           !target.closest('.accessibility-settings-panel') && 
-          !target.closest('.accessibility-button')) {
+          !target.closest('.messages-accessibility-toggle')) {
         setShowAccessibilitySettings(false);
       }
     };
@@ -3157,7 +3193,11 @@ export function Messages() {
   }, [showAccessibilitySettings]);
 
   const containerClassNames = [
+    'messages-app-wrapper',
+    'landing-wrapper',
+    'brand-bg-light',
     'messages-container',
+    'messages-ui-modern',
     `spacing-${messageSpacing}`,
     `theme-${colorTheme}`,
     `font-${fontPreference}`,
@@ -3179,14 +3219,8 @@ export function Messages() {
   // Show loading state while initializing or if userRole is not available yet
   if (loading || !currentUser || !userRole) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        fontSize: '18px'
-      }}>
-        Loading messages...
+      <div className="landing-wrapper brand-bg-light landing-loading-screen landing-loading-light">
+        Loading messages…
       </div>
     );
   }
@@ -3218,39 +3252,58 @@ export function Messages() {
         {announcement}
       </div>
 
-      <a href="#messages-main-content" className="skip-link">
-        Skip to main content
-      </a>
-
-      <motion.header className="messages-header" role="banner">
-        <motion.button
-          onClick={goBack}
-          className="back-button"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          aria-label="Go back to home"
-        >
-          ← Back
-        </motion.button>
-        <motion.h1
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-        >
-          Connect 💬
-        </motion.h1>
-        <div className="messages-header-actions">
+      <nav className="glass-nav glass-nav-light messages-top-nav" aria-label="Messages" role="banner">
+        <div className="messages-nav-left">
           <motion.button
-            onClick={() => setShowAccessibilitySettings(!showAccessibilitySettings)}
-            className="accessibility-button"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="Accessibility settings"
-            title="Accessibility settings"
+            type="button"
+            onClick={goBack}
+            className="btn-ghost-dark"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            aria-label="Go back to home"
           >
-            ⚙️
+            ← Back
+          </motion.button>
+          <img src={logoImage} alt="JustWav3" className="nav-logo messages-nav-logo" width={160} height={48} />
+          <div className="messages-nav-titles">
+            <span className="messages-nav-title">Messages</span>
+            <span className="messages-nav-sub">Chat with your learning circle</span>
+          </div>
+        </div>
+        <div className="nav-actions">
+          <motion.button
+            type="button"
+            onClick={() => setShowAccessibilitySettings(!showAccessibilitySettings)}
+            className="btn-cyan-solid messages-accessibility-toggle"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            aria-label="Accessibility settings"
+            aria-expanded={showAccessibilitySettings}
+          >
+            Accessibility
           </motion.button>
         </div>
-      </motion.header>
+      </nav>
+
+      <div className="messages-a11y-quick-bar" role="toolbar" aria-label="Quick accessibility">
+        <button
+          type="button"
+          className={`messages-a11y-quick-bar__btn ${simplificationMode ? 'is-active' : ''}`}
+          onClick={() => setSimplificationMode(!simplificationMode)}
+          aria-pressed={simplificationMode}
+        >
+          <SimplifyIcon size={18} className="messages-a11y-quick-bar__simplify-icon" />
+          {simplificationMode ? 'Detailed view' : 'Simplify text'}
+        </button>
+        <button
+          type="button"
+          className={`messages-a11y-quick-bar__btn ${fontPreference === 'opendyslexic' ? 'is-active' : ''}`}
+          onClick={() => setFontPreference(fontPreference === 'opendyslexic' ? 'default' : 'opendyslexic')}
+          aria-pressed={fontPreference === 'opendyslexic'}
+        >
+          {fontPreference === 'opendyslexic' ? 'Standard font' : 'Dyslexia-friendly font'}
+        </button>
+      </div>
 
       {showAccessibilitySettings && (
         <motion.div
@@ -3416,10 +3469,12 @@ export function Messages() {
         </motion.div>
       )}
 
-      <div className="messages-content">
-        <nav 
-          className="messages-sidebar"
-          style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px` }}
+      <div
+        className="messages-content messages-content--grid messages-layout"
+        style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties}
+      >
+        <nav
+          className="messages-sidebar messages-sidebar--modern"
           role="navigation"
           aria-label="Conversations and contacts"
         >
@@ -3503,9 +3558,10 @@ export function Messages() {
               )}
             </div>
 
-          <div className={`messages-tabs ${isCompact ? 'compact' : ''}`} role="tablist" aria-label="Message sections">
+          <div className={`messages-tabs sidebar-tab-group ${isCompact ? 'compact' : ''}`} role="tablist" aria-label="Message sections">
             <button
-              className={`tab-button ${activeTab === 'conversations' ? 'active' : ''}`}
+              type="button"
+              className={`tab-button tab-btn ${activeTab === 'conversations' ? 'active' : ''}`}
               onClick={() => setActiveTab('conversations')}
               role="tab"
               aria-selected={activeTab === 'conversations'}
@@ -3517,7 +3573,8 @@ export function Messages() {
               {conversations.length > 0 && <span className="tab-badge">{conversations.length}</span>}
             </button>
             <button
-              className={`tab-button ${activeTab === 'contacts' ? 'active' : ''}`}
+              type="button"
+              className={`tab-button tab-btn ${activeTab === 'contacts' ? 'active' : ''}`}
               onClick={() => setActiveTab('contacts')}
               role="tab"
               aria-selected={activeTab === 'contacts'}
@@ -3528,7 +3585,8 @@ export function Messages() {
               {isCompact ? '👥' : 'Contacts'}
             </button>
             <button
-              className={`tab-button ${activeTab === 'requests' ? 'active' : ''}`}
+              type="button"
+              className={`tab-button tab-btn ${activeTab === 'requests' ? 'active' : ''}`}
               onClick={() => setActiveTab('requests')}
               title={isCompact ? 'Requests' : ''}
             >
@@ -3555,7 +3613,7 @@ export function Messages() {
                   conversations.map((conv) => (
                     <motion.div
                       key={conv.otherUserId}
-                      className={`conversation-item ${selectedConversation === conv.otherUserId ? 'selected' : ''} ${isCompact ? 'compact' : ''}`}
+                      className={`conversation-item convo-item ${selectedConversation === conv.otherUserId ? 'selected' : ''} ${isCompact ? 'compact' : ''}`}
                       onClick={() => {
                         setSelectedConversation(conv.otherUserId);
                         setActiveTab('conversations');
@@ -3566,7 +3624,7 @@ export function Messages() {
                     >
                       <div className="conversation-info">
                         <div className="conversation-header">
-                          <span className="role-icon">{getRoleIcon(conv.otherUserRole)}</span>
+                          <span className="role-icon avatar-container">{getRoleIcon(conv.otherUserRole)}</span>
                           <span className="conversation-email">{conv.otherUserEmail}</span>
                         </div>
                       </div>
@@ -3594,7 +3652,7 @@ export function Messages() {
                   contacts.map((contact) => (
                     <motion.div
                       key={contact.uid}
-                      className={`contact-item ${selectedContact === contact.uid ? 'selected' : ''}`}
+                      className={`contact-item convo-item ${selectedContact === contact.uid ? 'selected' : ''}`}
                       onClick={() => {
                         if (contact.canMessage) {
                           setSelectedConversation(contact.uid);
@@ -3607,7 +3665,7 @@ export function Messages() {
                     >
                       <div className="contact-info">
                         <div className="contact-header">
-                          <span className="role-icon">{getRoleIcon(contact.role)}</span>
+                          <span className="role-icon avatar-container">{getRoleIcon(contact.role)}</span>
                           <span className="contact-email">{contact.email}</span>
                         </div>
                         <div className="contact-status">
@@ -3741,16 +3799,15 @@ export function Messages() {
             setIsResizing(true);
           }}
         />
-        <main 
+        <main
           id="messages-main-content"
-          className="messages-view"
+          className="messages-view messages-view--modern chat-main"
           role="main"
           aria-label="Conversation area"
-          style={{ maxWidth: `calc(100% - ${sidebarWidth}px)` }}
         >
           {selectedConversation ? (
             <>
-              <div className="messages-header-bar">
+              <div className="messages-header-bar chat-header">
                 <h3>
                   {conversations.find(c => c.otherUserId === selectedConversation)?.otherUserEmail || 
                    contacts.find(c => c.uid === selectedConversation)?.email}
@@ -3761,7 +3818,9 @@ export function Messages() {
                   title={simplificationMode ? 'Disable simplification mode' : 'Enable simplification mode (makes messages easier to read)'}
                   aria-label={simplificationMode ? 'Disable simplification mode' : 'Enable simplification mode'}
                 >
-                  <span className="toggle-icon">📝</span>
+                  <span className="toggle-icon">
+                    <SimplifyIcon size={16} />
+                  </span>
                   <span className="toggle-label">{simplificationMode ? 'Simplified' : 'Simplify'}</span>
                 </button>
               </div>
@@ -3796,7 +3855,13 @@ export function Messages() {
                     const canEdit = canEditMessage(msg);
 
                     return (
-                      <div key={msg.id} className="message-wrapper">
+                      <motion.div
+                        key={msg.id}
+                        className="message-wrapper"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      >
                         {isEditing ? (
                           <div className="message-edit-container">
                             <input
@@ -3830,7 +3895,7 @@ export function Messages() {
                           </div>
                         ) : (
                           <div
-                            className={`message ${msg.senderId === currentUser?.uid ? 'sent' : 'received'} ${showReactionPickerFor === msg.id ? 'picker-open' : ''}`}
+                            className={`message message-bubble ${msg.senderId === currentUser?.uid ? 'sent msg-sent' : 'received msg-received'} ${showReactionPickerFor === msg.id ? 'picker-open' : ''}`}
                             onClick={() => setShowReactionPickerFor(showReactionPickerFor === msg.id ? null : msg.id)}
                             style={{ cursor: 'pointer' }}
                             onDoubleClick={() => {
@@ -3947,7 +4012,13 @@ export function Messages() {
                                     title={speakingMessageId === msg.id ? 'Stop reading' : 'Read message aloud'}
                                     aria-label={speakingMessageId === msg.id ? 'Stop reading' : 'Read message aloud'}
                                   >
-                                    {speakingMessageId === msg.id ? '🔇' : '🔊'}
+                                    <img
+                                      src={audioIcon}
+                                      alt=""
+                                      className={speakingMessageId === msg.id ? 'tts-button-icon tts-button-icon--active' : 'tts-button-icon'}
+                                      width={18}
+                                      height={18}
+                                    />
                                   </button>
                                 </>
                               )}
@@ -4022,12 +4093,12 @@ export function Messages() {
                             </button>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     );
                   })
                 )}
               </div>
-              <div className="message-input-container">
+              <div className="message-input-container message-input-container--floating">
                 {/* Typing indicator */}
                 {typingStatus[selectedConversation] && (
                   <div className="typing-indicator">
@@ -4042,6 +4113,7 @@ export function Messages() {
                     </span>
                   </div>
                 )}
+                <div className="message-input-floating-card">
                 <div className="message-input-wrapper">
                   {audioBlob && audioUrl ? (
                     <div className="voice-recording-preview">
@@ -4137,8 +4209,9 @@ export function Messages() {
                         🎙️
                       </button>
                       <button
+                        type="button"
                         onClick={sendMessage}
-                        className="send-button"
+                        className="send-button btn-cyan-solid"
                         disabled={!newMessage.trim() && !audioBlob}
                         aria-label="Send message"
                       >
@@ -4147,11 +4220,13 @@ export function Messages() {
                     </>
                   )}
                 </div>
+                </div>
               </div>
             </>
           ) : (
-            <div className="no-conversation-selected" role="status" aria-live="polite">
-              <p>Select a conversation to start messaging</p>
+            <div className="no-conversation-selected no-conversation-selected--modern" role="status" aria-live="polite">
+              <img src={logoImage} alt="" className="no-conversation-selected__logo" width={120} height={36} />
+              <p>Select a connection to start the wave</p>
             </div>
           )}
         </main>

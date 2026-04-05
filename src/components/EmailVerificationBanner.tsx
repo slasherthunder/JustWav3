@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { FirebaseError } from 'firebase/app';
 import './EmailVerificationBanner.css';
+import { MailIcon } from './MailIcon';
 
 export function EmailVerificationBanner() {
   const { currentUser, sendVerificationEmail } = useAuth();
@@ -58,7 +59,9 @@ export function EmailVerificationBanner() {
       transition={{ duration: 0.3 }}
     >
       <div className="verification-content">
-        <div className="verification-icon">📧</div>
+        <div className="verification-icon" aria-hidden="true">
+          <MailIcon size={40} />
+        </div>
         <div className="verification-text">
           <h4>Please verify your email address</h4>
           <p>

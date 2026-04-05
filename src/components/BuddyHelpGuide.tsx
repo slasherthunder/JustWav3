@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import './BuddyHelpGuide.css';
+import audioIcon from '../assets/images/audioicon.png';
 
 interface HelpItem {
   gesture: string;
@@ -100,7 +101,13 @@ export function BuddyHelpGuide({ onClose }: BuddyHelpGuideProps) {
               }}
               aria-label={audioEnabled ? 'Disable audio' : 'Enable audio'}
             >
-              {audioEnabled ? '🔊' : '🔇'}
+              <img
+                src={audioIcon}
+                alt=""
+                className={audioEnabled ? 'help-audio-icon' : 'help-audio-icon help-audio-icon--muted'}
+                width={22}
+                height={22}
+              />
             </button>
             <button className="close-button" onClick={onClose} aria-label="Close help guide">
               ✕
@@ -146,7 +153,10 @@ export function BuddyHelpGuide({ onClose }: BuddyHelpGuideProps) {
                           speakText(`${item.gesture} means ${item.meaning}. ${item.description}`);
                         }}
                       >
-                        🔊 Hear Again
+                        <span className="demo-button-inner">
+                          <img src={audioIcon} alt="" className="help-audio-icon-inline" width={16} height={16} />
+                          Hear Again
+                        </span>
                       </button>
                     </motion.div>
                   )}

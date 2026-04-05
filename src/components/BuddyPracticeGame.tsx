@@ -4,7 +4,7 @@ import Webcam from 'react-webcam';
 import { Hands } from '@mediapipe/hands';
 import { Camera } from '@mediapipe/camera_utils';
 import './BuddyPracticeGame.css';
-import threeFingersIcon from '../assets/images/three_fingers_up.png';
+import gestureIcon from '../assets/images/gestureicon.png';
 
 type GestureType = '1' | '2' | '3' | '4' | 'thumbsUp' | 'thumbsDown' | '-';
 
@@ -94,7 +94,7 @@ export function BuddyPracticeGame({ onComplete, onClose }: BuddyPracticeGameProp
 
         const hands = new Hands({
           locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
           }
         });
 
@@ -356,7 +356,7 @@ export function BuddyPracticeGame({ onComplete, onClose }: BuddyPracticeGameProp
                 >
                   <div className="instruction-icon">
                     {currentPracticeStep.visualAid === "image" ? (
-                      <img src={threeFingersIcon} alt="3 fingers" style={{ width: '48px', height: '48px' }} />
+                      <img src={gestureIcon} alt="" style={{ width: '48px', height: '48px' }} />
                     ) : (
                       currentPracticeStep.visualAid
                     )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -10,7 +10,10 @@ import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
 import { getAssignmentsByStudent } from '../utils/assignments';
 import type { Assignment } from '../types/assignments';
 import './Home.css';
-import logoImage from '../assets/images/logo.png';
+import './StudentHome.css';
+import teacherProfileImage from '../assets/images/teacherprofile.png';
+import parentProfileImage from '../assets/images/parentprofile.png';
+import studentProfileImage from '../assets/images/studentprofile.png';
 
 interface LearningReport {
   id: string;
@@ -75,11 +78,27 @@ interface ParentConnection {
   createdAt: Timestamp;
 }
 
+function getAssignmentDueState(assignment: Assignment) {
+  const dueDate = assignment.dueDate
+    ? new Date((assignment.dueDate as Timestamp).seconds * 1000)
+    : null;
+  if (!dueDate) {
+    return { dueDate: null as Date | null, kind: 'none' as const };
+  }
+  const now = new Date();
+  const isOverdue = dueDate < now;
+  const msLeft = dueDate.getTime() - Date.now();
+  const isDueSoon = !isOverdue && msLeft < 24 * 60 * 60 * 1000 && msLeft >= 0;
+  if (isOverdue) return { dueDate, kind: 'overdue' as const };
+  if (isDueSoon) return { dueDate, kind: 'soon' as const };
+  return { dueDate, kind: 'ok' as const };
+}
+
 export function StudentHome() {
   const { currentUser, logout } = useAuth();
   const { setNavigating } = useNavigation();
   const navigate = useNavigate();
-  const [textSize, setTextSize] = useState(1);
+  const [textSize, setTextSize] = useState(1.125);
   const [highContrast, setHighContrast] = useState(false);
   const [reports, setReports] = useState<LearningReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
@@ -114,6 +133,16 @@ export function StudentHome() {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [assignmentMcqSets, setAssignmentMcqSets] = useState<Record<string, { title: string }>>({});
   const [loadingMcqSets, setLoadingMcqSets] = useState(false);
+
+  const trophyStoriesRef = useRef<HTMLDetailsElement>(null);
+
+  const openTrophyStories = () => {
+    const el = trophyStoriesRef.current;
+    if (el) {
+      el.open = true;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   useEffect(() => {
     document.documentElement.style.setProperty('--text-size-multiplier', textSize.toString());
@@ -637,17 +666,6 @@ export function StudentHome() {
     }
   };
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.5
-      }
-    }
-  };
-
   const cardVariants = {
     hidden: { opacity: 0, scale: 0.9 },
     visible: {
@@ -661,513 +679,415 @@ export function StudentHome() {
 
   return (
     <motion.div
-      className="home-container"
+      className={`student-adventure ${highContrast ? 'student-adventure--contrast' : ''}`}
       initial="hidden"
       animate="visible"
       variants={containerVariants}
     >
-      <a href="#main-content" className="skip-link">
-        Skip to main content
-      </a>
-      <motion.header
-        className="home-header"
-        role="banner"
-        variants={itemVariants}
-      >
-        <motion.h1
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-        >
-          <img src={logoImage} alt="JustWav3" style={{ maxHeight: '50px', width: 'auto', verticalAlign: 'middle' }} /> 🎓
-        </motion.h1>
-        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
+      <nav className="student-adventure-nav" aria-label="My learning space">
+        <div className="student-adventure-nav__brand">
+          <div className="student-adventure-nav__mark" aria-hidden="true">
+            🌟
+          </div>
+          <h2 className="student-adventure-nav__title">My Learning Space</h2>
+        </div>
+        <div className="student-adventure-nav__actions">
           <motion.button
-            onClick={() => { setNavigating(true); navigate('/messages'); }}
-            className="messaging-button"
-            aria-label="Open Connect"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: (unreadMessageCount > 0 || pendingRequestCount > 0) 
-                ? 'linear-gradient(135deg, #FF3B30 0%, #FF6B6B 50%, #FF3B30 100%)'
-                : 'linear-gradient(135deg, var(--disability-blue) 0%, #4169E1 50%, var(--disability-blue) 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: (unreadMessageCount > 0 || pendingRequestCount > 0)
-                ? '0 8px 24px rgba(255, 59, 48, 0.4)'
-                : '0 8px 24px rgba(65, 105, 225, 0.4)',
-              transition: 'all 0.3s ease'
+            type="button"
+            className="student-adventure__bubble"
+            onClick={() => {
+              setNavigating(true);
+              navigate('/messages');
             }}
+            aria-label={`Messages${unreadMessageCount > 0 ? `, ${unreadMessageCount} unread` : ''}`}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
-            💬
+            <span aria-hidden="true">💬</span>
+            <span>Messages</span>
+            {unreadMessageCount > 0 && (
+              <span className="student-adventure__badge">{unreadMessageCount > 9 ? '9+' : unreadMessageCount}</span>
+            )}
+            {unreadMessageCount === 0 && pendingRequestCount > 0 && (
+              <span className="student-adventure__badge" title="Pending invites">
+                !
+              </span>
+            )}
           </motion.button>
           <motion.button
+            type="button"
+            className="student-adventure__bubble"
             onClick={() => setShowAccessibilityModal(true)}
-            className="accessibility-settings-button"
-            aria-label="Open accessibility settings"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: 'linear-gradient(135deg, var(--disability-green) 0%, #00A86B 50%, var(--disability-green) 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(0, 132, 61, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            aria-label="Settings"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
-            ⚙️
+            <span aria-hidden="true">⚙️</span>
+            <span>Settings</span>
           </motion.button>
           <motion.button
+            type="button"
+            className="student-adventure__bubble student-adventure__bubble--ghost"
             onClick={handleLogout}
-            className="logout-button"
-            aria-label="Log out of your account"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: 'linear-gradient(135deg, #FF6B6B 0%, #FF3B30 50%, #FF6B6B 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            aria-label="Log out"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
-            logout
+            Log out
           </motion.button>
         </div>
-      </motion.header>
-      <main id="main-content" className="home-main" role="main">
+      </nav>
+      <main id="main-content" className="student-adventure-main" role="main">
         <EmailVerificationBanner />
-        <motion.div
-          className="welcome-card"
-          variants={cardVariants}
-          whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
-          <motion.h2
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+        <header className="student-adventure-hero">
+          <h1 className="student-adventure-hero__h1">
+            Hello,{' '}
+            <span className="student-adventure-hero__name">
+              {currentUser?.email?.split('@')[0] || 'friend'}
+            </span>
+            !
+          </h1>
+          <p className="student-adventure-hero__sub">What are we doing today?</p>
+        </header>
+
+        {/* Task-based adventure — bento zones */}
+        <div className="student-adventure-bento">
+          <section
+            className="student-adventure-zone student-adventure-zone--work"
+            aria-labelledby="zone-work-heading"
           >
-            Welcome, Student! 🎓
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
+            <div className="student-adventure-zone__head">
+              <span className="student-adventure-zone__icon" aria-hidden="true">
+                📝
+              </span>
+              <h2 id="zone-work-heading" className="student-adventure-zone__h2">
+                My School Work
+              </h2>
+            </div>
+            <p className="student-adventure-zone__text" style={{ marginTop: 0 }}>
+              Your tasks from school. Tap one to start.
+            </p>
+            <div className="student-adventure-task-list">
+              {loadingAssignments ? (
+                <p className="student-adventure-empty">Loading your tasks…</p>
+              ) : assignments.length === 0 ? (
+                <p className="student-adventure-empty">All caught up! No tasks right now. 🎉</p>
+              ) : (
+                assignments.slice(0, 5).map((assignment) => {
+                  const { dueDate, kind } = getAssignmentDueState(assignment);
+                  const title =
+                    assignmentMcqSets[assignment.mcqSetId]?.title || 'School task';
+                  const dueLine =
+                    kind === 'overdue'
+                      ? { icon: '⚠️', text: 'Past due — ask for help if you need it', cls: 'student-adventure-task-row__meta--late' }
+                      : kind === 'soon'
+                        ? { icon: '⏰', text: 'Due soon', cls: 'student-adventure-task-row__meta--soon' }
+                        : kind === 'ok' && dueDate
+                          ? { icon: '📅', text: `Due ${dueDate.toLocaleDateString()}`, cls: 'student-adventure-task-row__meta--ok' }
+                          : { icon: '📌', text: 'No due date', cls: 'student-adventure-task-row__meta--ok' };
+
+                  return (
+                    <button
+                      type="button"
+                      key={assignment.assignmentId}
+                      className="student-adventure-task-row"
+                      onClick={() => {
+                        setNavigating(true);
+                        navigate(`/practice?assignmentId=${assignment.assignmentId}`);
+                      }}
+                    >
+                      <div>
+                        <div className="student-adventure-task-row__title">{title}</div>
+                        <div className={`student-adventure-task-row__meta ${dueLine.cls}`}>
+                          <span aria-hidden="true">{dueLine.icon}</span>
+                          <span>{dueLine.text}</span>
+                        </div>
+                      </div>
+                      <span className="student-adventure-task-row__play" aria-hidden="true">
+                        ▶️
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            {assignments.length > 5 && (
+              <button
+                type="button"
+                className="student-adventure-btn-secondary"
+                onClick={() => setShowAssignmentModal(true)}
+              >
+                See all my tasks ({assignments.length})
+              </button>
+            )}
+          </section>
+
+          <section
+            className="student-adventure-zone student-adventure-zone--play"
+            aria-labelledby="zone-play-heading"
           >
-            You are logged in as:
-          </motion.p>
-          <motion.p
-            className="user-email"
-            aria-label={`User email: ${currentUser?.email}`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
-          >
-            {currentUser?.email}
-          </motion.p>
-          <motion.p
-            className="welcome-message"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-          >
-            Ready to learn? Let's start your learning adventure! 🌟
-          </motion.p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '0.75rem' }}>
+            <div className="student-adventure-zone__head">
+              <span className="student-adventure-zone__icon" aria-hidden="true">
+                🚀
+              </span>
+              <h2 id="zone-play-heading" className="student-adventure-zone__h2">
+                Play &amp; Learn
+              </h2>
+            </div>
+            <p className="student-adventure-zone__text">
+              Practice skills, try the tutorial, or play on your own — your choice.
+            </p>
             <motion.button
-              onClick={() => { setNavigating(true); navigate('/learn'); }}
-              className="logout-button"
-              aria-label="Our Tutorial"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
+              type="button"
+              className="student-adventure-btn-primary"
+              onClick={() => {
+                if (assignments.length === 0) {
+                  setNavigating(true);
+                  navigate('/practice');
+                  return;
+                }
+                setShowAssignmentModal(true);
+              }}
+              aria-label="Start play and learn practice"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              START PLAY &amp; LEARN
+            </motion.button>
+            <motion.button
+              type="button"
+              className="student-adventure-btn-secondary"
+              style={{ width: '100%', minHeight: 48 }}
+              onClick={() => {
+                setNavigating(true);
+                navigate('/learn');
+              }}
+              aria-label="Open tutorial"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               Our Tutorial
             </motion.button>
-          </div>
-        </motion.div>
+          </section>
 
-        {/* Hub-based Layout */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(2, 1fr)', 
-          gap: '2.5rem', 
-          marginTop: '2.5rem',
-          maxWidth: '1400px',
-          margin: '2.5rem auto 0',
-          padding: '0 var(--spacing-lg)'
-        }}>
-          
-          {/* My Work Hub */}
-        <motion.section
-          className="reports-history"
-            aria-labelledby="work-hub-heading"
-          variants={itemVariants}
-            style={{ 
-              border: '2px solid rgba(102, 126, 234, 0.2)', 
-              borderRadius: '20px', 
-              padding: '2rem',
-              background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%)',
-              boxShadow: '0 8px 32px rgba(102, 126, 234, 0.1)',
-              minHeight: '500px',
-              display: 'flex',
-              flexDirection: 'column'
-            }}
+          <section
+            className="student-adventure-zone student-adventure-zone--helpers"
+            aria-labelledby="zone-helpers-heading"
           >
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 'var(--spacing-md)', 
-              marginBottom: '2rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '2px solid rgba(102, 126, 234, 0.15)'
-            }}>
-              <span style={{ fontSize: '3rem' }}>📚</span>
-              <h2 id="work-hub-heading" style={{ 
-                margin: 0, 
-                fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier) * 1.2)',
-                fontWeight: 700,
-                color: 'var(--primary-color)'
-              }}>My Work</h2>
+            <div className="student-adventure-zone__head">
+              <span className="student-adventure-zone__icon" aria-hidden="true">
+                👥
+              </span>
+              <h2 id="zone-helpers-heading" className="student-adventure-zone__h2">
+                My Helpers
+              </h2>
             </div>
-
-            {/* Assignments Section */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h3 id="assignments-heading" style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>📋 Assignments</h3>
-          {loadingAssignments ? (
-            <div className="reports-empty">
-              <p>Loading assignments...</p>
-            </div>
-          ) : assignments.length === 0 ? (
-            <div className="reports-empty">
-              <p>You don't have any assignments yet.</p>
-              <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
-                Your teachers will assign MCQ practice sets here.
-              </p>
-            </div>
-          ) : (
-            <div className="reports-grid">
-              {assignments.map((assignment) => {
-                const dueDate = assignment.dueDate 
-                  ? new Date((assignment.dueDate as Timestamp).seconds * 1000)
-                  : null;
-                const isOverdue = dueDate && dueDate < new Date();
-                const isDueSoon = dueDate && dueDate.getTime() - Date.now() < 24 * 60 * 60 * 1000 && !isOverdue;
-
-                return (
-                  <motion.div
-                    key={assignment.assignmentId}
-                    className="report-card"
-                    variants={cardVariants}
-                    initial="hidden"
-                    animate="visible"
-                    whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                  >
-                    <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>📋</div>
-                    <h4>Assignment</h4>
-                    {dueDate && (
-                      <p style={{ 
-                        color: isOverdue ? 'var(--error-color)' : isDueSoon ? '#ff9800' : 'var(--text-secondary)', 
-                        marginBottom: 'var(--spacing-sm)',
-                        fontWeight: isOverdue || isDueSoon ? 600 : 400
-                      }}>
-                        Due: {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {isOverdue && ' (Overdue)'}
-                        {isDueSoon && ' (Due Soon)'}
-                      </p>
-                    )}
-                    {assignment.settings.timeLimit && (
-                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-sm)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
-                        Time Limit: {assignment.settings.timeLimit} minutes
-                      </p>
-                    )}
-                    {assignment.settings.attemptLimit && (
-                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-sm)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
-                        Attempts: {assignment.settings.attemptLimit} max
-                      </p>
-                    )}
-                    {(assignment.settings.shuffleQuestions || assignment.settings.shuffleOptions) && (
-                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)' }}>
-                        {assignment.settings.shuffleQuestions && '🔄 Shuffled Questions '}
-                        {assignment.settings.shuffleOptions && '🔄 Shuffled Options'}
-                      </p>
-                    )}
-                    <motion.button
-                      className="logout-button"
-                      style={{ 
-                        marginTop: 'var(--spacing-md)', 
-                        width: '100%',
-                        background: isOverdue 
-                          ? 'linear-gradient(135deg, var(--error-color) 0%, #d32f2f 100%)'
-                          : 'linear-gradient(135deg, var(--primary-color) 0%, #4169E1 100%)'
-                      }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {isOverdue ? '⚠️ Start Assignment (Overdue)' : '▶️ Start Assignment'}
-                    </motion.button>
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
-            </div>
-
-            {/* Practice Section */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h3 style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>🎯 Practice</h3>
-              <motion.button
-                onClick={() => {
-                  if (assignments.length === 0) {
-                    alert('You don\'t have any assignments yet. Your teachers will assign MCQ practice sets to you.');
-                    return;
-                  }
-                  setShowAssignmentModal(true);
-                }}
-                className="logout-button"
-                aria-label="Start practice"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400 }}
-                    style={{ 
-                      width: '100%',
-                      padding: '1rem 1.5rem',
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)',
-                      fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))'
-                    }}
-              >
-                Start Practice
-              </motion.button>
-            </div>
-
-            {/* Learning Reports Section */}
-            <div style={{ flex: 1 }}>
-              <h3 id="reports-heading" style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>📊 Learning Reports</h3>
-              
-              {loadingReports ? (
-                <div className="reports-loading">
-                  <p>Loading your reports...</p>
-                </div>
-              ) : reports.length === 0 ? (
-                <div className="reports-empty">
-                  <p>No learning reports yet. Start your first learning session to see your progress!</p>
-                  <motion.button
-                    onClick={() => { setNavigating(true); navigate('/learn'); }}
-                    className="logout-button"
-                    aria-label="Our Tutorial"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: 'spring', stiffness: 400 }}
-                    style={{ marginTop: '1rem' }}
-                  >
-                    Our Tutorial
-                  </motion.button>
-                </div>
-              ) : (
-                <div className="reports-grid">
-                  {reports.map((report, index) => (
-                    <motion.div
-                      key={report.id}
-                      className="report-card"
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                    >
-                      <div className="report-header">
-                        <h4>Session Report</h4>
-                        <span className="report-date">
-                          {new Date(report.sessionDate).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
-                      </div>
-                      
-                      <div className="report-metrics">
-                        <div className="metric-item">
-                          <span className="metric-label">Success Rate</span>
-                          <span className="metric-value success">{Math.round(report.successRate)}%</span>
-                        </div>
-                        <div className="metric-item">
-                          <span className="metric-label">Attempts</span>
-                          <span className="metric-value">{report.totalAttempts}</span>
-                        </div>
-                        <div className="metric-item">
-                          <span className="metric-label">Successes</span>
-                          <span className="metric-value">{report.totalSuccesses}</span>
-                        </div>
-                        <div className="metric-item">
-                          <span className="metric-label">Help Requests</span>
-                          <span className="metric-value">{report.totalHelpRequests}</span>
-                        </div>
-                      </div>
-
-                      <div className="report-profile">
-                        <div className="profile-item">
-                          <strong>Best Modes:</strong> {report.profile.bestModes}
-                        </div>
-                        <div className="profile-item">
-                          <strong>Strengths:</strong> {report.profile.strengths}
-                        </div>
-                        <div className="profile-item">
-                          <strong>Recommendation:</strong> {report.profile.recommended}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+            <p className="student-adventure-zone__text">
+              Teachers and family connected to your account.
+            </p>
+            <div className="student-adventure-helpers-row" aria-label="Connected helpers">
+              {myTeachers.map((t) => (
+                <span
+                  key={t.id}
+                  className="student-adventure-helper-pill"
+                  title={t.teacherEmail}
+                  role="img"
+                  aria-label={`Teacher ${t.teacherEmail}`}
+                >
+                  👩‍🏫
+                </span>
+              ))}
+              {myParents.map((p) => (
+                <span
+                  key={p.id}
+                  className="student-adventure-helper-pill"
+                  title={p.parentEmail}
+                  role="img"
+                  aria-label={`Parent ${p.parentEmail}`}
+                >
+                  🏠
+                </span>
+              ))}
+              {myTeachers.length === 0 && myParents.length === 0 && (
+                <span className="student-adventure-empty" style={{ padding: 0 }}>
+                  No helpers yet — ask a grown-up to connect below.
+                </span>
               )}
             </div>
-        </motion.section>
+            <motion.button
+              type="button"
+              className="student-adventure-btn-helpers"
+              onClick={() => {
+                setNavigating(true);
+                navigate('/messages');
+              }}
+              aria-label="Ask a question in messages"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              Ask a question
+            </motion.button>
+          </section>
 
-          {/* My People Hub */}
-        <motion.section
-            className="reports-history"
-            aria-labelledby="people-hub-heading"
-          variants={itemVariants}
-            style={{ 
-              border: '2px solid rgba(34, 197, 94, 0.2)', 
-              borderRadius: '20px', 
-              padding: '2rem',
-              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)',
-              boxShadow: '0 8px 32px rgba(34, 197, 94, 0.1)',
-              minHeight: '500px',
+          <section
+            className="student-adventure-zone student-adventure-zone--trophy"
+            aria-labelledby="zone-trophy-heading"
+          >
+            <div className="student-adventure-zone__head">
+              <span className="student-adventure-zone__icon" aria-hidden="true">
+                🏆
+              </span>
+              <h2 id="zone-trophy-heading" className="student-adventure-zone__h2">
+                My Progress
+              </h2>
+            </div>
+            <div className="student-adventure-trophy-stat">
+              <div className="student-adventure-trophy-stat__n" aria-live="polite">
+                {loadingReports ? '…' : reports.length}
+              </div>
+              <div className="student-adventure-trophy-stat__label">Lessons completed</div>
+            </div>
+            <button
+              type="button"
+              className="student-adventure-btn-secondary"
+              onClick={openTrophyStories}
+              disabled={loadingReports}
+            >
+              See my badges
+            </button>
+          </section>
+        </div>
+
+        <details
+          ref={trophyStoriesRef}
+          id="student-trophy-stories"
+          className="student-adventure-details"
+          style={{ marginBottom: '2rem' }}
+        >
+          <summary>See my lesson stories (optional)</summary>
+          {loadingReports ? (
+            <p style={{ padding: '1rem 0' }}>Loading…</p>
+          ) : reports.length === 0 ? (
+            <p style={{ padding: '1rem 0', color: 'var(--sa-muted, #718096)' }}>
+              No stories yet — finish a lesson to earn your first badge.
+            </p>
+          ) : (
+            <div className="reports-grid" style={{ marginTop: '1rem' }}>
+              {reports.map((report, index) => (
+                <motion.div
+                  key={report.id}
+                  className="report-card"
+                  variants={cardVariants}
+                  initial="hidden"
+                  animate="visible"
+                  transition={{ delay: index * 0.05 }}
+                  whileHover={{ y: -4, boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}
+                >
+                  <div className="report-header">
+                    <h4>Lesson story</h4>
+                    <span className="report-date">
+                      {new Date(report.sessionDate).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <div className="report-metrics">
+                    <div className="metric-item">
+                      <span className="metric-label">Success Rate</span>
+                      <span className="metric-value success">{Math.round(report.successRate)}%</span>
+                    </div>
+                    <div className="metric-item">
+                      <span className="metric-label">Attempts</span>
+                      <span className="metric-value">{report.totalAttempts}</span>
+                    </div>
+                  </div>
+                  <div className="report-profile">
+                    <div className="profile-item">
+                      <strong>Strengths:</strong> {report.profile.strengths}
+                    </div>
+                    <div className="profile-item">
+                      <strong>Tip:</strong> {report.profile.recommended}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </details>
+
+        <section className="student-adventure-panel" aria-labelledby="find-teacher-heading">
+          <h2 id="find-teacher-heading" className="student-adventure-panel__h2">
+            Find your teacher
+          </h2>
+          <p style={{ marginTop: 0, fontWeight: 600, color: '#4a5568' }}>
+            Search by email.
+          </p>
+          <form
+            onSubmit={handleTeacherSearch}
+            style={{
               display: 'flex',
-              flexDirection: 'column'
+              gap: 'var(--spacing-md)',
+              alignItems: 'stretch',
+              flexWrap: 'wrap',
+              marginBottom: '1rem',
             }}
           >
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 'var(--spacing-md)', 
-              marginBottom: '2rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '2px solid rgba(34, 197, 94, 0.15)'
-            }}>
-              <span style={{ fontSize: '3rem' }}>👥</span>
-              <h2 id="people-hub-heading" style={{ 
-                margin: 0, 
-                fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier) * 1.2)',
-                fontWeight: 700,
-                color: 'var(--success-color)'
-              }}>My People</h2>
-            </div>
-
-            {/* Find Your Teachers Section */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h3 id="find-teachers-heading" style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>👩‍🏫 Teachers</h3>
-              <form onSubmit={handleTeacherSearch} style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'stretch', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
             <input
               type="text"
               value={teacherSearchQuery}
               onChange={(e) => setTeacherSearchQuery(e.target.value)}
-              placeholder="Search by teacher email"
+              placeholder="Teacher email"
               aria-label="Search by teacher email"
               style={{ flex: 1, minWidth: '240px' }}
             />
             <motion.button
               type="submit"
-              className="logout-button"
+              className="student-adventure-btn-primary"
+              style={{ marginTop: 0 }}
               aria-busy={teacherSearchLoading}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               {teacherSearchLoading ? 'Searching…' : 'Search'}
             </motion.button>
           </form>
-          {teacherSearchError && (
-            <p className="error-text" style={{ marginTop: 'var(--spacing-sm)' }}>{teacherSearchError}</p>
-          )}
+          {teacherSearchError && <p className="error-text">{teacherSearchError}</p>}
           {teachers.length > 0 && (
-                <div className="feature-grid" style={{ marginTop: '1.25rem', gap: '1rem' }}>
+            <div className="feature-grid" style={{ marginTop: '1rem', gap: '1rem' }}>
               {teachers.map((teacher) => {
-                const isPending = pendingRequests.some(req => req.requestedId === teacher.uid);
-                const isConnected = myTeachers.some(conn => conn.teacherId === teacher.uid);
-                
+                const isPending = pendingRequests.some((req) => req.requestedId === teacher.uid);
+                const isConnected = myTeachers.some((conn) => conn.teacherId === teacher.uid);
                 return (
-                  <motion.div 
-                    key={teacher.uid} 
-                    className="feature-card" 
-                    variants={cardVariants} 
-                    initial="hidden" 
+                  <motion.div
+                    key={teacher.uid}
+                    className="feature-card"
+                    variants={cardVariants}
+                    initial="hidden"
                     animate="visible"
-                    whileHover={{ y: -5, scale: 1.02, boxShadow: "0 8px 20px rgba(0,0,0,0.12)" }}
+                    whileHover={{ y: -4, scale: 1.01, boxShadow: '0 8px 20px rgba(0,0,0,0.1)' }}
                     style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}
                   >
-                    <div className="feature-icon-large">👩‍🏫</div>
+                    <div className="feature-icon-large">
+                      <img src={teacherProfileImage} alt="" className="teacher-role-icon-img" />
+                    </div>
                     <h4>{teacher.email}</h4>
                     {isConnected ? (
-                      <p style={{ color: 'var(--success-color)', fontWeight: 600 }}>✅ Connected</p>
+                      <p style={{ color: 'var(--success-color)', fontWeight: 700 }}>Connected</p>
                     ) : isPending ? (
-                      <p style={{ color: 'var(--text-secondary)' }}>⏳ Request Pending</p>
+                      <p style={{ color: 'var(--text-secondary)' }}>Waiting for answer…</p>
                     ) : (
                       <motion.button
+                        type="button"
                         onClick={() => handleRequestTeacher(teacher.uid, teacher.email)}
-                        className="logout-button"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        style={{ marginTop: 'var(--spacing-xs)' }}
+                        className="student-adventure-btn-helpers"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                       >
-                        Request Teacher
+                        Send invite
                       </motion.button>
                     )}
                   </motion.div>
@@ -1176,449 +1096,283 @@ export function StudentHome() {
             </div>
           )}
           {teachers.length === 0 && teacherSearchQuery.trim() && !teacherSearchLoading && !teacherSearchError && (
-                <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>No teachers found</p>
-              )}
-            </div>
+            <p style={{ color: 'var(--text-secondary)' }}>No teachers found</p>
+          )}
+        </section>
 
-            {/* Connected Teachers Section */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h3 id="connected-teachers-heading" style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>👩‍🏫 My Teachers</h3>
-              {myTeachers.length === 0 ? (
-                <div className="reports-empty">
-                  <p>You did not connect with any of your teachers yet.</p>
-                  <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
-                    Search for teachers above and send them connection requests, or wait for your teachers to request you.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <h4 style={{ 
-                    fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', 
-                    marginBottom: 'var(--spacing-sm)', 
-                    color: 'var(--text-secondary)',
-                    fontWeight: 500
-                  }}>My Teachers ({myTeachers.length})</h4>
-                  <div className="reports-grid">
-                    {myTeachers.map((connection) => (
-                      <motion.div
-                        key={connection.id}
-                        className="report-card"
-                        variants={cardVariants}
-                        initial="hidden"
-                        animate="visible"
-                        whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                      >
-                        <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👩‍🏫</div>
-                        <h4>{connection.teacherEmail}</h4>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--spacing-xs)' }}>
-                          Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}
-                        </p>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+        <div className="student-adventure-connect-grid">
+          <section className="student-adventure-panel" aria-labelledby="connected-teachers-heading">
+            <h2 id="connected-teachers-heading" className="student-adventure-panel__h2">
+              My teachers
+            </h2>
+            {myTeachers.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                None yet — use Find your teacher above.
+              </p>
+            ) : (
+              <div className="reports-grid">
+                {myTeachers.map((connection) => (
+                  <motion.div
+                    key={connection.id}
+                    className="report-card"
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    whileHover={{ y: -4, boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}
+                  >
+                    <div className="feature-icon-large">
+                      <img src={teacherProfileImage} alt="" className="teacher-role-icon-img" />
+                    </div>
+                    <h4>{connection.teacherEmail}</h4>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--spacing-xs)' }}>
+                      Connected{' '}
+                      {connection.createdAt
+                        ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString()
+                        : 'recently'}
+                    </p>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </section>
 
-            {/* Your Parents Section */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h3 id="your-parents-heading" style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>👨‍👩‍👧‍👦 My Parents/Guardians</h3>
-              {myParents.length === 0 ? (
-                <div className="reports-empty">
-                  <p>You did not connect with any of your parents/guardians yet.</p>
-                  <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
-                    Parents/Guardians can send you connection requests, which will appear in your Requests section below.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <h4 style={{ 
-                    fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', 
-                    marginBottom: 'var(--spacing-sm)', 
-                    color: 'var(--text-secondary)',
-                    fontWeight: 500
-                  }}>Connected Parents/Guardians ({myParents.length})</h4>
-                  <div className="reports-grid">
-                    {myParents.map((connection) => (
-                      <motion.div
-                        key={connection.id}
-                        className="report-card"
-                        variants={cardVariants}
-                        initial="hidden"
-                        animate="visible"
-                        whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                      >
-                        <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👨‍👩‍👧‍👦</div>
-                        <h4>{connection.parentEmail}</h4>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--spacing-xs)' }}>
-                          Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}
-                        </p>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          <section className="student-adventure-panel" aria-labelledby="your-parents-heading">
+            <h2 id="your-parents-heading" className="student-adventure-panel__h2">
+              My parents / guardians
+            </h2>
+            {myParents.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                None yet — they can send you a request.
+              </p>
+            ) : (
+              <div className="reports-grid">
+                {myParents.map((connection) => (
+                  <motion.div
+                    key={connection.id}
+                    className="report-card"
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    whileHover={{ y: -4, boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}
+                  >
+                    <div className="feature-icon-large">
+                      <img src={parentProfileImage} alt="" className="parent-role-icon-img" />
+                    </div>
+                    <h4>{connection.parentEmail}</h4>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--spacing-xs)' }}>
+                      Connected{' '}
+                      {connection.createdAt
+                        ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString()
+                        : 'recently'}
+                    </p>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
 
-            {/* Connection Requests Section */}
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <h3 id="requests-heading" style={{ 
-                  margin: 0, 
-                  fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)',
-                  fontWeight: 600,
-                  color: 'var(--text-color)'
-                }}>📬 Requests</h3>
+        <section className="student-adventure-panel" aria-labelledby="requests-heading">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <h2 id="requests-heading" className="student-adventure-panel__h2" style={{ margin: 0 }}>
+              Invites &amp; requests
+            </h2>
             <motion.button
+              type="button"
               onClick={fetchConnections}
               disabled={refreshingConnections}
-              className="logout-button"
-              style={{ padding: '8px 16px', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))' }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="student-adventure-btn-secondary"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              {refreshingConnections ? 'Refreshing...' : '🔄 Refresh'}
+              {refreshingConnections ? 'Refreshing…' : 'Refresh list'}
             </motion.button>
           </div>
-          
+
           {pendingRequests.length === 0 && parentPendingRequests.length === 0 ? (
-            <div className="reports-empty">
-              <p>No pending connection requests.</p>
-            </div>
+            <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>No invites waiting.</p>
           ) : (
             <>
-            
-            {/* Incoming Requests */}
-            {pendingRequests.filter(req => req.requestedId === currentUser?.uid).length > 0 && (
-              <div style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--primary-color)', fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
-                  Incoming Teacher Requests ({pendingRequests.filter(req => req.requestedId === currentUser?.uid).length})
-                </h4>
-                <div className="reports-grid">
-                  {pendingRequests.filter(req => req.requestedId === currentUser?.uid).map((request) => (
-                    <motion.div
-                      key={request.id}
-                      className="report-card"
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
-                      whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                    >
-                      <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👩‍🏫</div>
-                      <h4>{request.requestorEmail}</h4>
-                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
-                        {request.requestorRole === 'teacher' ? 'Teacher' : 'Student'} wants to connect
-                      </p>
-                      <div style={{ display: 'flex', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-md)' }}>
-                        <motion.button
-                          onClick={() => handleAcceptRequest(request.id, request.requestorId, request.requestorEmail, request.requestorRole)}
-                          className="logout-button"
-                          style={{ flex: 1, background: 'var(--success-color)' }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
+              {pendingRequests.filter((req) => req.requestedId === currentUser?.uid).length > 0 && (
+                <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--primary-color)' }}>
+                    Teacher invites ({pendingRequests.filter((req) => req.requestedId === currentUser?.uid).length})
+                  </h3>
+                  <div className="reports-grid">
+                    {pendingRequests
+                      .filter((req) => req.requestedId === currentUser?.uid)
+                      .map((request) => (
+                        <motion.div
+                          key={request.id}
+                          className="report-card"
+                          variants={cardVariants}
+                          initial="hidden"
+                          animate="visible"
+                          whileHover={{ y: -4, boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}
                         >
-                          ✅ Accept
-                        </motion.button>
-                        <motion.button
-                          onClick={() => handleRejectRequest(request.id)}
-                          className="logout-button"
-                          style={{ flex: 1, background: 'var(--error-color)' }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
+                          <div className="feature-icon-large">
+                            {request.requestorRole === 'teacher' ? (
+                              <img src={teacherProfileImage} alt="" className="teacher-role-icon-img" />
+                            ) : (
+                              <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                            )}
+                          </div>
+                          <h4>{request.requestorEmail}</h4>
+                          <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+                            Wants to connect
+                          </p>
+                          <div style={{ display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap' }}>
+                            <motion.button
+                              type="button"
+                              onClick={() =>
+                                handleAcceptRequest(
+                                  request.id,
+                                  request.requestorId,
+                                  request.requestorEmail,
+                                  request.requestorRole
+                                )
+                              }
+                              className="student-adventure-btn-primary"
+                              style={{ flex: 1, minWidth: 120 }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              Accept
+                            </motion.button>
+                            <motion.button
+                              type="button"
+                              onClick={() => handleRejectRequest(request.id)}
+                              className="student-adventure-btn-secondary"
+                              style={{ flex: 1, minWidth: 120 }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              No thanks
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {pendingRequests.filter((req) => req.requestorId === currentUser?.uid).length > 0 && (
+                <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-secondary)' }}>
+                    Waiting on teachers ({pendingRequests.filter((req) => req.requestorId === currentUser?.uid).length})
+                  </h3>
+                  <div className="reports-grid">
+                    {pendingRequests
+                      .filter((req) => req.requestorId === currentUser?.uid)
+                      .map((request) => (
+                        <motion.div
+                          key={request.id}
+                          className="report-card"
+                          variants={cardVariants}
+                          initial="hidden"
+                          animate="visible"
+                          whileHover={{ y: -4, boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}
                         >
-                          ❌ Reject
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  ))}
+                          <div className="feature-icon-large">
+                            <img src={teacherProfileImage} alt="" className="teacher-role-icon-img" />
+                          </div>
+                          <h4>{request.requestedEmail}</h4>
+                          <p style={{ color: 'var(--text-secondary)' }}>Waiting for their answer…</p>
+                        </motion.div>
+                      ))}
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Outgoing Requests */}
-            {pendingRequests.filter(req => req.requestorId === currentUser?.uid).length > 0 && (
-              <div>
-                <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
-                  Outgoing Teacher Requests ({pendingRequests.filter(req => req.requestorId === currentUser?.uid).length})
-                </h4>
-                <div className="reports-grid">
-                  {pendingRequests.filter(req => req.requestorId === currentUser?.uid).map((request) => (
-                    <motion.div
-                      key={request.id}
-                      className="report-card"
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
-                      whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                    >
-                      <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👩‍🏫</div>
-                      <h4>{request.requestedEmail}</h4>
-                      <p style={{ color: 'var(--text-secondary)' }}>⏳ Waiting for response...</p>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)', marginTop: 'var(--spacing-xs)' }}>
-                        Sent {request.createdAt ? new Date(request.createdAt.seconds * 1000).toLocaleDateString() : 'recently'}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Parent Incoming Requests */}
-            {parentPendingRequests.filter(req => req.requestedId === currentUser?.uid).length > 0 && (
-              <div style={{ marginTop: 'var(--spacing-lg)' }}>
-                <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--primary-color)', fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
-                  Incoming Parent Requests ({parentPendingRequests.filter(req => req.requestedId === currentUser?.uid).length})
-                </h4>
-                <div className="reports-grid">
-                  {parentPendingRequests.filter(req => req.requestedId === currentUser?.uid).map((request) => (
-                    <motion.div
-                      key={request.id}
-                      className="report-card"
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
-                      whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                    >
-                      <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👨‍👩‍👧‍👦</div>
-                      <h4>{request.requestorEmail}</h4>
-                      <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
-                        Parent wants to connect
-                      </p>
-                      <div style={{ display: 'flex', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-md)' }}>
-                        <motion.button
-                          onClick={() => handleAcceptParentRequest(request.id, request.requestorId, request.requestorEmail, request.requestorRole)}
-                          className="logout-button"
-                          style={{ flex: 1, background: 'var(--success-color)' }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
+              )}
+
+              {parentPendingRequests.filter((req) => req.requestedId === currentUser?.uid).length > 0 && (
+                <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--primary-color)' }}>
+                    Parent invites ({parentPendingRequests.filter((req) => req.requestedId === currentUser?.uid).length})
+                  </h3>
+                  <div className="reports-grid">
+                    {parentPendingRequests
+                      .filter((req) => req.requestedId === currentUser?.uid)
+                      .map((request) => (
+                        <motion.div
+                          key={request.id}
+                          className="report-card"
+                          variants={cardVariants}
+                          initial="hidden"
+                          animate="visible"
+                          whileHover={{ y: -4, boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}
                         >
-                          ✅ Accept
-                        </motion.button>
-                        <motion.button
-                          onClick={() => handleRejectParentRequest(request.id)}
-                          className="logout-button"
-                          style={{ flex: 1, background: 'var(--error-color)' }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
+                          <div className="feature-icon-large">
+                            <img src={parentProfileImage} alt="" className="parent-role-icon-img" />
+                          </div>
+                          <h4>{request.requestorEmail}</h4>
+                          <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+                            Parent wants to connect
+                          </p>
+                          <div style={{ display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap' }}>
+                            <motion.button
+                              type="button"
+                              onClick={() =>
+                                handleAcceptParentRequest(
+                                  request.id,
+                                  request.requestorId,
+                                  request.requestorEmail,
+                                  request.requestorRole
+                                )
+                              }
+                              className="student-adventure-btn-primary"
+                              style={{ flex: 1, minWidth: 120 }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              Accept
+                            </motion.button>
+                            <motion.button
+                              type="button"
+                              onClick={() => handleRejectParentRequest(request.id)}
+                              className="student-adventure-btn-secondary"
+                              style={{ flex: 1, minWidth: 120 }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              No thanks
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {parentPendingRequests.filter((req) => req.requestorId === currentUser?.uid).length > 0 && (
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-secondary)' }}>
+                    Waiting on parents ({parentPendingRequests.filter((req) => req.requestorId === currentUser?.uid).length})
+                  </h3>
+                  <div className="reports-grid">
+                    {parentPendingRequests
+                      .filter((req) => req.requestorId === currentUser?.uid)
+                      .map((request) => (
+                        <motion.div
+                          key={request.id}
+                          className="report-card"
+                          variants={cardVariants}
+                          initial="hidden"
+                          animate="visible"
+                          whileHover={{ y: -4, boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}
                         >
-                          ❌ Reject
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  ))}
+                          <div className="feature-icon-large">
+                            <img src={parentProfileImage} alt="" className="parent-role-icon-img" />
+                          </div>
+                          <h4>{request.requestedEmail}</h4>
+                          <p style={{ color: 'var(--text-secondary)' }}>Waiting for their answer…</p>
+                        </motion.div>
+                      ))}
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Parent Outgoing Requests */}
-            {parentPendingRequests.filter(req => req.requestorId === currentUser?.uid).length > 0 && (
-              <div style={{ marginTop: 'var(--spacing-lg)' }}>
-                <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
-                  Outgoing Parent Requests ({parentPendingRequests.filter(req => req.requestorId === currentUser?.uid).length})
-                </h4>
-                <div className="reports-grid">
-                  {parentPendingRequests.filter(req => req.requestorId === currentUser?.uid).map((request) => (
-                    <motion.div
-                      key={request.id}
-                      className="report-card"
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
-                      whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-                    >
-                      <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>👨‍👩‍👧‍👦</div>
-                      <h4>{request.requestedEmail}</h4>
-                      <p style={{ color: 'var(--text-secondary)' }}>⏳ Waiting for response...</p>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)', marginTop: 'var(--spacing-xs)' }}>
-                        Sent {request.createdAt ? new Date(request.createdAt.seconds * 1000).toLocaleDateString() : 'recently'}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
+              )}
             </>
           )}
-            </div>
-        </motion.section>
-
-          {/* My Tools Hub */}
-        <motion.section
-          className="reports-history"
-            aria-labelledby="tools-hub-heading"
-          variants={itemVariants}
-            style={{ 
-              border: '2px solid rgba(255, 193, 7, 0.2)', 
-              borderRadius: '20px', 
-              padding: '2rem',
-              background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.08) 0%, rgba(255, 152, 0, 0.08) 100%)',
-              boxShadow: '0 8px 32px rgba(255, 193, 7, 0.1)',
-              minHeight: '500px',
-              display: 'flex',
-              flexDirection: 'column',
-              gridColumn: '1 / -1',
-              maxWidth: '600px',
-              justifySelf: 'center'
-            }}
-          >
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 'var(--spacing-md)', 
-              marginBottom: '2rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '2px solid rgba(255, 193, 7, 0.15)'
-            }}>
-              <span style={{ fontSize: '3rem' }}>⚙️</span>
-              <h2 id="tools-hub-heading" style={{ 
-                margin: 0, 
-                fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier) * 1.2)',
-                fontWeight: 700,
-                color: '#ff9800'
-              }}>My Tools</h2>
-            </div>
-
-            {/* Accessibility Settings */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h3 id="accessibility-heading" style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>♿ Accessibility</h3>
-          
-          <div className="control-group">
-            <label htmlFor="text-size">
-              <motion.input
-                type="range"
-                id="text-size"
-                min="0.875"
-                max="1.5"
-                step="0.125"
-                value={textSize}
-                onChange={(e) => setTextSize(parseFloat(e.target.value))}
-                aria-label="Text size adjustment"
-                aria-valuemin={0.875}
-                aria-valuemax={1.5}
-                aria-valuenow={textSize}
-                whileFocus={{ scale: 1.05 }}
-              />
-              <span>Text Size: {Math.round(textSize * 100)}%</span>
-            </label>
-            <motion.span
-              className="range-label"
-              aria-live="polite"
-              key={textSize}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              Current size: {Math.round(textSize * 100)}% ({textSize < 1 ? 'Smaller' : textSize > 1 ? 'Larger' : 'Default'})
-            </motion.span>
-          </div>
-
-          <div className="control-group">
-            <label htmlFor="high-contrast">
-              <motion.input
-                type="checkbox"
-                id="high-contrast"
-                checked={highContrast}
-                onChange={(e) => setHighContrast(e.target.checked)}
-                aria-label="Enable high contrast mode"
-                whileTap={{ scale: 0.95 }}
-              />
-              <span>High Contrast Mode</span>
-            </label>
-            <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Increases contrast for better visibility
-            </p>
-          </div>
-            </div>
-
-            {/* Messages Section */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h3 style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>💬 Messages</h3>
-              <motion.button
-                onClick={() => { setNavigating(true); navigate('/messages'); }}
-                className="logout-button"
-                aria-label="Open messages"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400 }}
-                style={{ 
-                  width: '100%',
-                  padding: '1rem 1.5rem',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)',
-                  position: 'relative',
-                  fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))'
-                }}
-              >
-                {unreadMessageCount > 0 && (
-                  <span style={{
-                    position: 'absolute',
-                    top: '-8px',
-                    right: '-8px',
-                    background: 'var(--error-color)',
-                    color: 'white',
-                    borderRadius: '50%',
-                    width: '24px',
-                    height: '24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold'
-                  }}>
-                    {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
-                  </span>
-                )}
-                Open Messages {unreadMessageCount > 0 && `(${unreadMessageCount} unread)`}
-              </motion.button>
-            </div>
-
-            {/* Settings Section */}
-            <div style={{ flex: 1 }}>
-              <h3 style={{ 
-                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier) * 1.1)', 
-                marginBottom: '1.25rem',
-                fontWeight: 600,
-                color: 'var(--text-color)'
-              }}>⚙️ Settings</h3>
-              <motion.button
-                onClick={() => setShowAccessibilityModal(true)}
-                className="logout-button"
-                aria-label="Open accessibility settings"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400 }}
-                style={{ 
-                  width: '100%',
-                  padding: '1rem 1.5rem',
-                  background: 'linear-gradient(135deg, var(--disability-green) 0%, #00A86B 100%)',
-                  boxShadow: '0 8px 24px rgba(0, 132, 61, 0.4)',
-                  fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))'
-                }}
-              >
-                Advanced Settings
-              </motion.button>
-            </div>
-          </motion.section>
-                  </div>
+        </section>
 
         {/* Assignment Selection Modal */}
         {showAssignmentModal && (

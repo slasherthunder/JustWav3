@@ -68,6 +68,16 @@
   transform: scale(1.1);
 }
 
+.help-audio-icon {
+  display: block;
+  object-fit: contain;
+}
+
+.help-audio-icon--muted {
+  opacity: 0.45;
+  filter: grayscale(0.9);
+}
+
 .close-button {
   background: transparent;
   border: none;
@@ -168,6 +178,18 @@
   color: var(--text-secondary);
   margin: 0 0 0.75rem 0;
   line-height: 1.5;
+}
+
+.demo-button-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.help-audio-icon-inline {
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .demo-button {

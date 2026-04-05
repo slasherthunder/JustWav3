@@ -7,6 +7,9 @@ import { IconPasswordSelector } from './IconPasswordSelector';
 import './Auth.css';
 import { FirebaseError } from 'firebase/app';
 import { validateLoginInput, validatePasswordResetInput } from '../utils/validation';
+import gestureIcon from '../assets/images/gestureicon.png';
+import { MailIcon } from './MailIcon';
+import { IconFeatureImage } from './IconFeatureImage';
 
 // Convert icon array to password string with email for uniqueness
 function iconsToPassword(icons: string[], email: string): string {
@@ -139,7 +142,7 @@ export function Login() {
     } catch (err: unknown) {
       if (err instanceof FirebaseError) {
         if (err.code === 'auth/user-not-found') {
-          setError('Email not found. Maybe a typo in your name? Please check and try again! 📧');
+          setError('Email not found. Maybe a typo in your name? Please check and try again!');
         } else if (err.code === 'auth/wrong-password') {
           const newFailedAttempts = failedAttempts + 1;
           setFailedAttempts(newFailedAttempts);
@@ -160,7 +163,7 @@ export function Login() {
             setShowForgotHelp(true);
           }
         } else if (err.code === 'auth/invalid-email') {
-          setError('Please enter a valid email! 📧');
+          setError('Please enter a valid email!');
         } else {
           setError('Try again, you got this! 💪');
         }
@@ -239,7 +242,7 @@ export function Login() {
         // Firebase doesn't reveal if email exists for security, so we show a generic success message
         // But we still handle other errors
         if (err.code === 'auth/invalid-email') {
-          setResetError('Please enter a valid email! 📧');
+          setResetError('Please enter a valid email!');
         } else if (err.code === 'rate-limit-exceeded' || err.message.includes('Too many')) {
           setResetError(err.message);
         } else {
@@ -279,14 +282,19 @@ export function Login() {
       </Link>
       
       <div className="mascot">
-        <span style={{ fontSize: '80px', display: 'block' }}>
-          👋
-        </span>
+        <img
+          src={gestureIcon}
+          alt=""
+          className="mascot-img"
+          width={88}
+          height={88}
+          decoding="async"
+        />
       </div>
 
       <div className="auth-card child-friendly-card">
         <h2 className="friendly-header">
-          Welcome Back! 👋
+          Welcome Back!
         </h2>
         
         <p className="friendly-subtitle">
@@ -333,7 +341,9 @@ export function Login() {
                   <span className="step-label">Email setup</span>
                 </div>
                 <label htmlFor="email-prefix" className="label-with-icon">
-                  <span className="label-icon">📧</span>
+                  <span className="label-icon">
+                    <MailIcon size={22} />
+                  </span>
                   <span>Your Email</span>
                 </label>
                 <div className="email-input-group">
@@ -415,7 +425,8 @@ export function Login() {
                       }}
                       aria-label="Use icon password"
                     >
-                      🎨 Icon Password
+                      <IconFeatureImage size={18} />
+                      Icon Password
                     </button>
                     <button
                       type="button"
@@ -569,7 +580,10 @@ export function Login() {
             {resetSuccess ? (
               <div className="password-reset-success">
                 <span className="success-icon">✅</span>
-                <p>Password reset email sent! 📧</p>
+                <p className="password-reset-sent-line">
+                  <span>Password reset email sent!</span>{' '}
+                  <MailIcon size={24} className="password-reset-mail-icon" />
+                </p>
                 <p className="password-reset-hint">
                   Check your inbox (and spam/junk folder) for the reset link. The email may take a few minutes to arrive.
                 </p>
@@ -588,7 +602,9 @@ export function Login() {
 
                 <div className="form-group child-friendly-group">
                   <label htmlFor="reset-email-prefix" className="label-with-icon">
-                    <span className="label-icon">📧</span>
+                    <span className="label-icon">
+                      <MailIcon size={22} />
+                    </span>
                     <span>Your Email</span>
                   </label>
                   <div className="email-input-group">
@@ -647,7 +663,9 @@ export function Login() {
                   ) : (
                     <>
                       <span>Send Reset Link</span>
-                      <span style={{ marginLeft: '8px' }}>📧</span>
+                      <span style={{ marginLeft: '8px', display: 'inline-flex', verticalAlign: 'middle' }}>
+                        <MailIcon size={20} />
+                      </span>
                     </>
                   )}
                 </button>

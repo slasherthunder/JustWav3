@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
+import './Landing.css';
 import { collection, query as fsQuery, where, limit, getDocs, orderBy, query, addDoc, updateDoc, serverTimestamp, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { Timestamp } from 'firebase/firestore';
 import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
 import logoImage from '../assets/images/logo.png';
+import parentProfileImage from '../assets/images/parentprofile.png';
+import studentProfileImage from '../assets/images/studentprofile.png';
+import audioIcon from '../assets/images/audioicon.png';
 
 interface ParentConnectionRequest {
   id: string;
@@ -280,7 +284,7 @@ export function ParentHome() {
 
     const container = document.querySelector('.home-container');
     if (container) {
-      container.className = `home-container spacing-${spacing}`;
+      container.className = `landing-wrapper brand-bg-light home-container spacing-${spacing}`;
     }
   }, [textSize, highContrast, fontPreference, reducedMotion, spacing]);
 
@@ -883,181 +887,105 @@ export function ParentHome() {
     }
   };
 
+  const selectedAvgAccuracy =
+    selectedStudent && selectedStudent.reports.length > 0
+      ? selectedStudent.reports.reduce((acc, r) => acc + (r.successRate || 0), 0) /
+        selectedStudent.reports.length
+      : null;
+
+  const selectedModeLabels =
+    selectedStudent && selectedStudent.reports.length > 0
+      ? Array.from(
+          new Set(
+            selectedStudent.reports.flatMap((r) =>
+              (r.profile?.bestModes || '')
+                .split(/[,;]+/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+            )
+          )
+        ).slice(0, 8)
+      : [];
+
   return (
     <motion.div
-      className="home-container"
+      className={`landing-wrapper brand-bg-light home-container spacing-${spacing}`}
       initial="hidden"
       animate="visible"
       variants={containerVariants}
     >
-      <motion.header
-        className="home-header"
-        role="banner"
-        variants={itemVariants}
-      >
-        <motion.h1
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-        >
-          <img src={logoImage} alt="JustWav3" style={{ maxHeight: '50px', width: 'auto', verticalAlign: 'middle' }} /> 👨‍👩‍👧‍👦
-        </motion.h1>
-        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
+      <nav className="glass-nav glass-nav-light parent-dashboard-nav" aria-label="Parent dashboard">
+        <div className="nav-left">
+          <img src={logoImage} alt="JustWav3" className="nav-logo" width={150} height={44} />
+          <span className="nav-divider" aria-hidden="true" />
+          <div className="nav-user-pill">
+            <img src={parentProfileImage} alt="" className="avatar-sm" width={32} height={32} />
+            <span className="text-dark-sm">Parent Portal</span>
+          </div>
+        </div>
+        <div className="nav-actions">
           <motion.button
+            type="button"
             onClick={() => { setNavigating(true); navigate('/messages'); }}
-            className="messaging-button"
-            aria-label="Open Connect"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: (unreadMessageCount > 0 || pendingRequestCount > 0) 
-                ? 'linear-gradient(135deg, #FF3B30 0%, #FF6B6B 50%, #FF3B30 100%)'
-                : 'linear-gradient(135deg, var(--disability-blue) 0%, #4169E1 50%, var(--disability-blue) 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: (unreadMessageCount > 0 || pendingRequestCount > 0)
-                ? '0 8px 24px rgba(255, 59, 48, 0.4)'
-                : '0 8px 24px rgba(65, 105, 225, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            className="btn-ghost-dark relative"
+            aria-label="Open messages"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
-            💬
+            Messages
+            {(unreadMessageCount > 0 || pendingRequestCount > 0) && (
+              <span className="notification-dot" aria-hidden="true" />
+            )}
           </motion.button>
           <motion.button
+            type="button"
             onClick={() => setShowAccessibilityModal(true)}
-            className="accessibility-settings-button"
-            aria-label="Open accessibility settings"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: 'linear-gradient(135deg, var(--disability-green) 0%, #00A86B 50%, var(--disability-green) 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(0, 132, 61, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            className="btn-outline-dark-lg"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            ⚙️
+            Accessibility
           </motion.button>
           <motion.button
+            type="button"
             onClick={handleLogout}
-            className="logout-button"
-            aria-label="Log out of your account"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400 }}
-            style={{
-              padding: '14px',
-              background: 'linear-gradient(135deg, #FF6B6B 0%, #FF3B30 50%, #FF6B6B 100%)',
-              color: 'white',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
-              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
-              cursor: 'pointer',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
-              transition: 'all 0.3s ease'
-            }}
+            className="btn-cyan-solid"
+            aria-label="Sign out"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            logout
+            Sign Out
           </motion.button>
         </div>
-      </motion.header>
-      <main id="main-content" className="home-main" role="main">
+      </nav>
+      <main id="main-content" className="parent-dashboard-main container-xl" role="main">
         <EmailVerificationBanner />
-        <motion.div
-          className="welcome-card"
-          variants={cardVariants}
-          whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
-          <motion.h2
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            Welcome, Parent! 👨‍👩‍👧‍👦
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-          >
-            You are logged in as:
-          </motion.p>
-          <motion.p
-            className="user-email"
-            aria-label={`User email: ${currentUser?.email}`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
-          >
+        <header className="dashboard-header-text">
+          <h1 className="hero-title-dark-sm">
+            Welcome back, <span className="text-cyan-solid">Parent</span>
+          </h1>
+          <p className="bento-text-muted">Monitor progress and manage student connections.</p>
+          <p className="user-email" aria-label={currentUser?.email ? `Signed in as ${currentUser.email}` : 'Account'}>
             {currentUser?.email}
-          </motion.p>
-          <motion.p
-            className="welcome-message"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-          >
-            Manage your child's learning journey and track their progress here.
-          </motion.p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '0.75rem' }}>
+          </p>
+          <div className="parent-dashboard-quick-actions">
             <motion.button
+              type="button"
               onClick={() => { setNavigating(true); navigate('/learn'); }}
-              className="logout-button"
-              aria-label="Demo version"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
+              className="btn-outline-dark-lg"
+              aria-label="Open demo version"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               Demo Version
             </motion.button>
-            <motion.button
-              onClick={() => { setNavigating(true); navigate('/practice'); }}
-              className="logout-button"
-              aria-label="Start practice"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400 }}
-              style={{ 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
-              }}
-            >
-              Start Practice
-            </motion.button>
           </div>
-        </motion.div>
+        </header>
 
         {/* Connection Requests Section */}
         {pendingRequests.length > 0 && (
           <motion.section
-            className="reports-history"
+            className="reports-history parent-dashboard-alerts"
             aria-labelledby="requests-heading"
             variants={itemVariants}
           >
@@ -1097,7 +1025,13 @@ export function ParentHome() {
                           animate="visible"
                           whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
                         >
-                          <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>🎓</div>
+                          <div className="feature-icon-large" style={{ marginBottom: 'var(--spacing-sm)' }}>
+                            {request.requestorRole === 'student' ? (
+                              <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                            ) : (
+                              <img src={parentProfileImage} alt="" className="parent-role-icon-img" />
+                            )}
+                          </div>
                           <h4>{request.requestorEmail}</h4>
                           <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
                             {request.requestorRole === 'student' ? 'Student' : 'Parent'} wants to connect
@@ -1144,7 +1078,9 @@ export function ParentHome() {
                           animate="visible"
                           whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
                         >
-                          <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>🎓</div>
+                          <div className="feature-icon-large" style={{ marginBottom: 'var(--spacing-sm)' }}>
+                            <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                          </div>
                           <h4>{request.requestedEmail}</h4>
                           <p style={{ color: 'var(--text-secondary)' }}>⏳ Waiting for response...</p>
                           <p style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)', marginTop: 'var(--spacing-xs)' }}>
@@ -1160,16 +1096,24 @@ export function ParentHome() {
           </motion.section>
         )}
 
-        {/* Your Students Section */}
         <motion.section
           className="reports-history"
           aria-labelledby="your-students-heading"
           variants={itemVariants}
         >
-          <h3 id="your-students-heading">Your Students 🎓</h3>
+          <h3 id="your-students-heading">
+            <img
+              src={studentProfileImage}
+              alt=""
+              className="student-role-icon-heading"
+              width={32}
+              height={32}
+            />{' '}
+            Your Students
+          </h3>
           {myStudents.length === 0 ? (
             <div className="reports-empty">
-              <p>You don't have any connected students yet.</p>
+              <p>You don&apos;t have any connected students yet.</p>
               <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
                 Search for students below and send them connection requests, or wait for students to request you.
               </p>
@@ -1183,21 +1127,22 @@ export function ParentHome() {
                   variants={cardVariants}
                   initial="hidden"
                   animate="visible"
-                  whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}
+                  whileHover={{ y: -5, boxShadow: '0 10px 30px rgba(0,0,0,0.15)' }}
                 >
-                  <div className="feature-icon-large" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-sm)' }}>🎓</div>
+                  <div className="feature-icon-large" style={{ marginBottom: 'var(--spacing-sm)' }}>
+                    <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                  </div>
                   <h4>{connection.studentEmail}</h4>
                   <p>Connected since {connection.createdAt ? new Date(connection.createdAt.seconds * 1000).toLocaleDateString() : 'Recently'}</p>
                   <motion.button
                     onClick={() => {
-                      console.log('View Reports button clicked for:', connection.studentEmail);
                       loadStudentReports(connection.studentId, connection.studentEmail);
                     }}
                     className="logout-button"
-                    style={{ 
-                      marginTop: 'var(--spacing-md)', 
+                    style={{
+                      marginTop: 'var(--spacing-md)',
                       width: '100%',
-                      background: 'var(--primary-color)'
+                      background: 'var(--primary-color)',
                     }}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -1242,23 +1187,26 @@ export function ParentHome() {
           {students.length > 0 && (
             <div className="feature-grid" style={{ marginTop: 'var(--spacing-md)' }}>
               {students.map((s) => {
-                const isPending = pendingRequests.some(req => 
-                  (req.requestorId === currentUser?.uid && req.requestedId === s.uid) ||
-                  (req.requestedId === currentUser?.uid && req.requestorId === s.uid)
+                const isPending = pendingRequests.some(
+                  (req) =>
+                    (req.requestorId === currentUser?.uid && req.requestedId === s.uid) ||
+                    (req.requestedId === currentUser?.uid && req.requestorId === s.uid)
                 );
-                const isConnected = myStudents.some(conn => conn.studentId === s.uid);
-                
+                const isConnected = myStudents.some((conn) => conn.studentId === s.uid);
+
                 return (
-                  <motion.div 
-                    key={s.uid} 
-                    className="feature-card" 
-                    variants={cardVariants} 
-                    initial="hidden" 
+                  <motion.div
+                    key={s.uid}
+                    className="feature-card"
+                    variants={cardVariants}
+                    initial="hidden"
                     animate="visible"
                     style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}
                   >
                     <div style={{ flex: 1 }}>
-                      <div className="feature-icon-large">🎓</div>
+                      <div className="feature-icon-large">
+                        <img src={studentProfileImage} alt="" className="student-role-icon-img" />
+                      </div>
                       <h4>{s.email}</h4>
                       <p>Reports: {s.reports.length}</p>
                     </div>
@@ -1268,10 +1216,10 @@ export function ParentHome() {
                         loadStudentReports(s.uid, s.email);
                       }}
                       className="logout-button"
-                      style={{ 
+                      style={{
                         marginTop: 'var(--spacing-xs)',
                         width: '100%',
-                        background: 'var(--primary-color)'
+                        background: 'var(--primary-color)',
                       }}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
@@ -1306,38 +1254,62 @@ export function ParentHome() {
           )}
         </motion.section>
 
-        {selectedStudent ? (
-          <motion.section
-            id="student-reports-section"
-            className="reports-history"
-            aria-labelledby="student-reports-heading"
-            variants={itemVariants}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{ 
-              marginTop: 'var(--spacing-lg)', 
-              padding: 'var(--spacing-lg)', 
-              border: '2px solid var(--primary-color)', 
-              borderRadius: 'var(--border-radius)',
-              backgroundColor: 'var(--background)',
-              minHeight: '200px'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-              <h3 id="student-reports-heading" style={{ margin: 0, color: 'var(--text-color)' }}>
-                Learning Reports for {selectedStudent.email} 📊
-              </h3>
-              <motion.button
-                onClick={() => setSelectedStudent(null)}
-                className="logout-button"
-                style={{ padding: '8px 16px', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))' }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                aria-label="Close student reports"
-              >
-                ✕ Close
-              </motion.button>
-            </div>
+        <section className="dashboard-main-content" aria-live="polite">
+            <AnimatePresence mode="wait">
+              {selectedStudent ? (
+                <motion.div
+                  key={selectedStudent.uid}
+                  id="student-reports-section"
+                  className="report-view"
+                  aria-labelledby="student-reports-heading"
+                  variants={itemVariants}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="report-header-pill">
+                    <span className="landing-badge-cyan">Active insight</span>
+                    <h2 id="student-reports-heading">{selectedStudent.email}&apos;s progress</h2>
+                    <motion.button
+                      type="button"
+                      onClick={() => setSelectedStudent(null)}
+                      className="btn-ghost-dark"
+                      style={{ marginLeft: 'auto' }}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      aria-label="Clear student selection"
+                    >
+                      Close
+                    </motion.button>
+                  </div>
+
+                  {!loadingReports && selectedStudent.reports.length > 0 && (
+                    <div className="stats-bento-grid">
+                      <div className="bento-card stat-card">
+                        <span className="label">Average accuracy</span>
+                        <span className="value text-cyan-solid">
+                          {selectedAvgAccuracy != null ? `${selectedAvgAccuracy.toFixed(0)}%` : '—'}
+                        </span>
+                      </div>
+                      <div className="bento-card stat-card">
+                        <span className="label">Modes highlighted</span>
+                        <div className="mode-pills-sm">
+                          {selectedModeLabels.length > 0 ? (
+                            selectedModeLabels.map((m) => (
+                              <span key={m} className="mode-pill-mini">
+                                {m}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="bento-text-muted" style={{ fontSize: '0.8rem' }}>
+                              See sessions below
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
             {loadingReports ? (
               <div className="reports-loading" style={{ padding: 'var(--spacing-lg)', textAlign: 'center' }}>
                 <p>Loading reports...</p>
@@ -1514,8 +1486,31 @@ export function ParentHome() {
                 </div>
               </>
             )}
-          </motion.section>
-        ) : null}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="empty-dashboard"
+                  className="empty-dashboard-state"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <img
+                    src={studentProfileImage}
+                    alt=""
+                    className="student-role-icon-img"
+                    width={96}
+                    height={96}
+                    style={{ objectFit: 'contain', marginBottom: '1rem' }}
+                  />
+                  <p className="bento-text-muted">
+                    Select a student profile to view detailed learning analytics and session reports.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+        </section>
 
         <motion.section
           className="accessibility-controls"
@@ -1563,40 +1558,55 @@ export function ParentHome() {
           </div>
         </motion.section>
 
-        {/* Accessibility Settings Modal */}
-        {showAccessibilityModal && (
-          <div 
-            className="modal-overlay" 
-            onClick={() => setShowAccessibilityModal(false)}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="accessibility-heading"
-          >
-            <div className="accessibility-settings-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2 id="accessibility-heading">
-                  <span className="accessibility-icon">⚙️</span>
-                  Accessibility Settings
-                </h2>
-                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                  <button
-                    onClick={() => setShowKeyboardShortcuts(!showKeyboardShortcuts)}
-                    className="keyboard-shortcuts-button"
-                    aria-label="Show keyboard shortcuts"
-                    title="Keyboard shortcuts (Ctrl/Cmd + /)"
-                  >
-                    ⌨️
-                  </button>
-                  <button
-                    onClick={() => setShowAccessibilityModal(false)}
-                    className="close-modal-button"
-                    aria-label="Close accessibility settings"
-                  >
-                    ✕
-                  </button>
+        {/* Accessibility Settings — slide-in panel */}
+        <AnimatePresence>
+          {showAccessibilityModal && (
+            <>
+              <motion.div
+                className="accessibility-drawer-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowAccessibilityModal(false)}
+                aria-hidden="true"
+              />
+              <motion.aside
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="accessibility-heading"
+                className="accessibility-panel-light"
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'tween', duration: 0.25 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="panel-header">
+                  <h2 id="accessibility-heading" style={{ margin: 0, fontSize: '1.125rem' }}>
+                    <span className="accessibility-icon">⚙️</span> Preferences
+                  </h2>
+                  <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowKeyboardShortcuts(!showKeyboardShortcuts)}
+                      className="keyboard-shortcuts-button"
+                      aria-label="Show keyboard shortcuts"
+                      title="Keyboard shortcuts (Ctrl/Cmd + /)"
+                    >
+                      ⌨️
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAccessibilityModal(false)}
+                      className="btn-ghost-dark"
+                      aria-label="Close accessibility settings"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
-              </div>
-              
+
+                <div className="panel-body">
               <div className="accessibility-controls-content">
                 {/* Font Options Section */}
                 <div className="accessibility-section">
@@ -1755,7 +1765,9 @@ export function ParentHome() {
                       className="accessibility-feature-button"
                       onClick={readPage}
                     >
-                      <span className="button-icon">🔊</span>
+                      <span className="button-icon" aria-hidden>
+                        <img src={audioIcon} alt="" width={20} height={20} />
+                      </span>
                       <span className="button-text">Read Page</span>
                     </button>
                     <button
@@ -1969,9 +1981,11 @@ export function ParentHome() {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Keyboard Shortcuts Modal */}
         {showKeyboardShortcuts && (
