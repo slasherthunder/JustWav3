@@ -9,28 +9,45 @@ JustWav3 is an innovative accessibility-focused learning platform designed for s
 ### 1. **Authentication & User Management**
 
 #### **Multiple Authentication Methods**
-- **Email/Password Authentication**: Traditional text-based password login
+- **Email/Password Authentication**: Traditional text-based password login (labeled as "⌨️ Typing Password")
 - **Icon-Based Password System**: Child-friendly password system using emoji icons
-  - Users select 3 emoji icons as their password
+  - Users select 3 emoji icons as their password from a 3x2 grid (6 emojis)
+  - **Emoji Selection**: 6 high-contrast, distinct emojis (🦁 🐢 🦄 🍕 🚀 ⭐)
+  - **Grid Layout**: Strict 3 columns × 2 rows grid with 15px gap
+  - **Large, Centered Emojis**: 3rem font size, perfectly centered in grid cells
+  - **Visual Slot Preview**: Shows password slots with order numbers
   - Passwords are unique per user (includes email prefix)
   - Provides visual, accessible alternative to text passwords
+  - No number badges on selected emojis (cleaner interface)
 - **Role-Based Accounts**: Three distinct user roles
   - **Student**: Primary users who engage in learning activities
   - **Teacher**: Educators who monitor student progress
   - **Parent**: Guardians who track their child's learning journey
 
 #### **Sign Up Process**
+- **Progressive Disclosure (Step-by-Step)**:
+  - Step 1: Role selection (Parent, Student, or Teacher)
+  - Step 2: Email setup with live validation
+  - Step 3: Password creation (Icon or Typing password)
 - Email validation with `@gmail.com` quick-fill option
-- Role selection (Parent, Student, or Teacher)
-- Password mode selection (Normal or Icon-based)
+- Live email validation UI showing "Your login name will be: {emailPrefix}"
+- Password mode selection (Icon-based or ⌨️ Typing Password)
 - Password confirmation for both modes
+- Visual password comparison for icon passwords
 - Email verification system with verification emails
-- Success feedback and navigation to home page
+- Static, stable UI (no animations) for users with sensory sensitivities
+- Auto-redirect to appropriate home page based on role
 
 #### **Login Process**
+- **Progressive Disclosure (Step-by-Step)**:
+  - Step 1: Email setup with live validation
+  - Step 2: Password entry (Icon or Typing password)
 - Email/password or icon password login
-- Password visibility toggle for normal passwords
+- Live email validation UI showing "Your login name will be: {emailPrefix}"
+- Password visibility toggle for typing passwords
+- Back button to return to previous step
 - Helpful error messages with friendly language
+- Static, stable UI (no animations) for users with sensory sensitivities
 - Auto-redirect to appropriate home page based on role
 
 #### **Email Verification**
@@ -44,19 +61,37 @@ JustWav3 is an innovative accessibility-focused learning platform designed for s
 ### 2. **Landing Page**
 
 #### **Marketing & Introduction**
-- Hero section with app name and tagline
-- Four key feature highlights:
-  - Real-Time Gesture Recognition
-  - Adaptive Learning
-  - Progress Tracking
-  - Multimodal Support
-- Call-to-action buttons (Sign Up / Sign In)
+- **Feature Carousel**: Accessible slideshow displaying value propositions
+  - Eliminates infinite scroll, reduces visual noise
+  - One value proposition at a time for better focus
+  - Predictable navigation for users with learning differences
+  - **Accessibility Features**:
+    - Pause on Hover: Auto-play stops when mouse is over carousel
+    - Large Navigation Dots: Clear pagination indicators
+    - High Contrast Arrows: Large, easy-to-hit navigation buttons
+    - Reduced Motion Support: Respects user's system settings
+  - **Full-Viewport Design**:
+    - Top 20%: Logo and Header (Sign In/Up)
+    - Middle 60%: Feature Carousel
+    - Bottom 20%: Call to Action and Navigation Dots
+- **"Try It Out" Button**: Direct navigation to Learn Demo page
 - Responsive design with accessibility considerations
 
 #### **Navigation**
 - Header with Sign In and Sign Up buttons
 - Auto-redirect authenticated users to their home page
 - Clean, uncluttered layout
+
+#### **Learn Demo Page**
+- Publicly accessible demo version of the Learn page
+- No authentication required
+- Full functionality including:
+  - All learning modes (Audio, Image, Icons, Gesture, Simple)
+  - Real-time gesture recognition
+  - Buddy Button features
+  - Question answering with gesture controls
+- "Demo Mode" banner with "Sign Up to Save Progress" button
+- Mirrors the full Learn page experience for trial users
 
 ---
 
@@ -79,20 +114,23 @@ The core learning experience featuring five distinct learning modes:
 
 3. **🎨 Icons Mode**
    - Important words converted to clickable icons
+   - **Standardized Pictograms**: Uses ARASAAC or Sclera pictograms (familiar to users with learning disabilities)
    - Kid-friendly explanations for each icon
    - Interactive icon exploration
    - Simplified vocabulary presentation
 
 4. **👋 Gesture Mode**
    - Gesture-driven interactions only
-   - Four gesture commands:
-     - **Thumbs Up** (👍) = "I understand"
-     - **Open Hand** (✋) = "Please help me"
-     - **Fist** (✊) = "I'm ready for the next one"
-     - **Wave** (👋) = "Explain it more simply"
+   - Webcam feed moved to center-top of learning pane
+   - User can see themselves without looking away from question
+   - Six gesture commands for answer selection and help
    - No text buttons, gesture-only interface
 
 5. **📝 Simple Mode**
+   - **Large Buttons**: Answer buttons are 25% of screen height
+   - **High-Contrast Colors**: AA/AAA compliant colors (black text on white, green for correct, red for incorrect)
+   - **No Background Decorations**: Removed borders, shadows, and rounded corners
+   - **Increased Font Size**: 1.5x multiplier for better readability
    - Simplified text explanations
    - Easy words and clear visuals
    - Reduced complexity for struggling learners
@@ -101,9 +139,24 @@ The core learning experience featuring five distinct learning modes:
 - Mode selector buttons (horizontal layout)
 - "I understand" button (records success)
 - "Please help" button (records help request)
-- "Next item" button (advances content)
+- **Navigation Buttons**: "Previous Question" and "Next Question" buttons (replaced gesture-based navigation)
+- **Buddy Button**: Interactive Learning Companion (Floating Action Button)
+  - **"Try Me" Mode**: Interactive button explanations with glowing outlines on hover
+  - **"Let's Practice" Mini-Game**: Full-screen overlay for gesture practice with guidance
+  - **"Help Me" Quick Guide**: Simple cheat sheet with gesture explanations
 - Quick check-in questions after each mode
 - Session controls with "End Session & View Profile"
+
+#### **Difficulty & Progress Visuals**
+- **Difficulty Themes**: UI theme changes based on difficulty level (1→5)
+  - Beginner (Level 1-2): Soft pastels
+  - Intermediate (Level 3): Balanced colors
+  - Expert (Level 4-5): Bold, "pro" colors (deep blues or gold)
+- **Streak Indicators**: Visual feedback for consecutive correct answers
+  - Small flame or star icon displayed when streak > 0
+  - Dynamic background color based on streak length
+  - Pulsing animation for streaks ≥ 3
+  - Boosts dopamine and encourages focus
 
 ---
 
@@ -111,23 +164,35 @@ The core learning experience featuring five distinct learning modes:
 
 #### **MediaPipe Hands Integration**
 - Real-time hand tracking using MediaPipe Hands library
-- 21 hand landmark detection
+- **Two-Hand Detection**: Configured for `maxNumHands: 2`
+- **Optimized Detection**: `minDetectionConfidence: 0.5` and `minTrackingConfidence: 0.5`
+- 21 hand landmark detection per hand
 - Live webcam feed display
-- Canvas overlay with gesture visualization
+- **Ghost Hand Overlay**: Semi-transparent canvas overlay showing MediaPipe landmarks in real-time
+  - Confirms to users that the AI "sees" them
+  - Color-coded hands (green for first hand, orange for second)
+  - Real-time hand skeleton visualization
 
 #### **Gesture Detection System**
-- **Four Recognized Gestures**:
-  - **Open Hand** (✋): Help request
-  - **Fist** (✊): Ready for next item
-  - **Point** (👆): Understanding confirmation
-  - **Wave** (👋): Request simpler explanation
+- **Six Recognized Gestures** (for Learn and Practice pages):
+  - **1 Finger** (1️⃣): Select Answer A
+  - **2 Fingers** (2️⃣): Select Answer B
+  - **3 Fingers** (3️⃣): Select Answer C (uses custom three_fingers_up.png image)
+  - **4 Fingers** (4️⃣): Select Answer D
+  - **Thumbs Up** (👍): "I understand"
+  - **Two Thumbs Down** (👎👎): "I need help"
+- **Improved Thumbs Down Detection**:
+  - Checks thumb position relative to wrist and index MCP joint
+  - Verifies other fingers are curled (fist check)
+  - Prioritizes two-hand detection for "help" signal
+  - Handles hand occlusion scenarios
 - **Gesture State Machine**:
   - IDLE → DETECTING → CONFIRMED → COOLDOWN
   - Prevents false positives and accidental triggers
   - Cooldown period between gesture actions
 - **Confidence Scoring**: Real-time confidence percentage display
 - **Visual Feedback**: 
-  - Live hand landmarks drawn on canvas
+  - Live hand landmarks drawn on ghost hand overlay
   - Color-coded gesture status
   - Debug mode with detailed detection information
 
@@ -173,6 +238,7 @@ Generated at session end with:
 - Personalized greeting with user email
 - Quick access to start learning sessions
 - User-friendly interface
+- **Logout Button**: Text-based "logout" button (replaced door emoji 🚪)
 
 #### **Your Learning Reports History**
 - Complete history of all learning sessions
@@ -220,6 +286,8 @@ Generated at session end with:
 #### **Welcome Section**
 - Teacher-specific greeting
 - Overview of teacher dashboard capabilities
+- **Logout Button**: Text-based "logout" button (replaced door emoji 🚪)
+- **Logout Button**: Text-based "logout" button (replaced door emoji)
 
 #### **Your Students Section**
 - Always-visible section showing all connected students
@@ -268,6 +336,8 @@ When viewing a student's reports:
 #### **Welcome Section**
 - Parent-specific greeting
 - Overview of parent dashboard
+- **Logout Button**: Text-based "logout" button (replaced door emoji 🚪)
+- **Logout Button**: Text-based "logout" button (replaced door emoji)
 
 #### **Find Students**
 - Search functionality to find child accounts
@@ -343,10 +413,12 @@ Feature cards explaining:
 - Descriptive alt text and labels
 
 #### **Interaction Accessibility**
-- Large, clickable targets
+- Large, clickable targets (minimum 44px × 44px)
 - Clear button labels
+- **Static UI for Sensory Sensitivities**: No shake or celebrate animations on Login/Signup pages
 - Visual feedback on interactions
 - Error messages with friendly language
+- **Reduced Motion Support**: Respects user's system preferences for animations
 
 ---
 
@@ -617,5 +689,5 @@ JustWav3 is specifically designed for:
 
 ---
 
-*Last Updated: January 2025 - Includes rate limiting, input validation, and security enhancements*
+*Last Updated: February 2025 - Includes progressive disclosure, accessibility improvements, gesture detection enhancements, and UI refinements*
 

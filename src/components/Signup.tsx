@@ -40,66 +40,35 @@ export function Signup() {
   // Progressive disclosure: track current step
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   
-  // Animation states
-  const [roleJustSelected, setRoleJustSelected] = useState(false);
-  const [emailJustValidated, setEmailJustValidated] = useState(false);
-  const [passwordJustMatched, setPasswordJustMatched] = useState(false);
-  
   const { signup, login } = useAuth();
   const { setNavigating } = useNavigation();
   const navigate = useNavigate();
-  
-  // Audio cue function
-  const playSelectionSound = () => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.value = 800;
-      oscillator.type = 'sine';
-      
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-      
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.1);
-    } catch (err) {
-      // Silently fail if audio context is not available
-    }
-  };
 
   function handleGmailClick() {
     if (emailPrefix) {
       setEmail(`${emailPrefix}@gmail.com`);
       setEmailValid(true);
-      setEmailJustValidated(true);
-      setTimeout(() => {
-        setEmailJustValidated(false);
-        setCurrentStep(3);
-      }, 300);
-      playSelectionSound();
+      setCurrentStep(3);
     } else {
       setEmail('@gmail.com');
     }
   }
 
   function handleEmailPrefixChange(e: React.ChangeEvent<HTMLInputElement>) {
-    // Remove spaces and special characters that Firebase/Emails don't like
-    const sanitizedValue = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Allow letters, numbers, and periods; remove other special characters
+    // Remove spaces and other invalid characters, but keep periods
+    let sanitizedValue = e.target.value.toLowerCase().replace(/[^a-z0-9.]/g, '');
+    // Remove consecutive periods (but allow single periods)
+    sanitizedValue = sanitizedValue.replace(/\.{2,}/g, '.');
+    // Only remove period at the very start (allow trailing period while typing)
+    sanitizedValue = sanitizedValue.replace(/^\./g, '');
     setEmailPrefix(sanitizedValue);
     
     if (sanitizedValue) {
       setEmail(`${sanitizedValue}@gmail.com`);
       setEmailValid(true);
-      setEmailJustValidated(true);
-      setTimeout(() => setEmailJustValidated(false), 300);
     } else {
       setEmailValid(false);
-      setEmailJustValidated(false);
     }
     // Reset password uniqueness when email changes
     setPasswordUnique(null);
@@ -243,8 +212,9 @@ export function Signup() {
         )}
 
         <form id="signup-form" onSubmit={handleSubmit} aria-label="Sign up form">
-          {/* Step 1: Role Selection */}
-          {currentStep >= 1 && (
+          <div className="form-steps-container">
+            {/* Step 1: Role Selection */}
+            {currentStep === 1 && (
             <div className="form-group child-friendly-group">
               <div className="step-indicator">
                 <span className="step-number">1</span>
@@ -257,15 +227,10 @@ export function Signup() {
               <div className="role-selection">
                 <button
                 type="button"
-                className={`role-button ${userRole === 'parent' ? 'selected' : ''} ${roleJustSelected && userRole === 'parent' ? 'celebrate' : ''}`}
+                className={`role-button ${userRole === 'parent' ? 'selected' : ''}`}
                 onClick={() => {
                   setUserRole('parent');
-                  setRoleJustSelected(true);
-                  playSelectionSound();
-                  setTimeout(() => {
-                    setRoleJustSelected(false);
-                    setCurrentStep(2);
-                  }, 300);
+                  setCurrentStep(2);
                 }}
                 aria-label="I am a parent"
               >
@@ -274,15 +239,10 @@ export function Signup() {
               </button>
               <button
                 type="button"
-                className={`role-button ${userRole === 'student' ? 'selected' : ''} ${roleJustSelected && userRole === 'student' ? 'celebrate' : ''}`}
+                className={`role-button ${userRole === 'student' ? 'selected' : ''}`}
                 onClick={() => {
                   setUserRole('student');
-                  setRoleJustSelected(true);
-                  playSelectionSound();
-                  setTimeout(() => {
-                    setRoleJustSelected(false);
-                    setCurrentStep(2);
-                  }, 300);
+                  setCurrentStep(2);
                 }}
                 aria-label="I am a student"
               >
@@ -291,15 +251,10 @@ export function Signup() {
               </button>
               <button
                 type="button"
-                className={`role-button ${userRole === 'teacher' ? 'selected' : ''} ${roleJustSelected && userRole === 'teacher' ? 'celebrate' : ''}`}
+                className={`role-button ${userRole === 'teacher' ? 'selected' : ''}`}
                 onClick={() => {
                   setUserRole('teacher');
-                  setRoleJustSelected(true);
-                  playSelectionSound();
-                  setTimeout(() => {
-                    setRoleJustSelected(false);
-                    setCurrentStep(2);
-                  }, 300);
+                  setCurrentStep(2);
                 }}
                 aria-label="I am a teacher"
               >
@@ -307,16 +262,24 @@ export function Signup() {
                 <span className="role-text">Teacher</span>
               </button>
               </div>
-            </div>
-          )}
-
-          {/* Step 2: Email Setup */}
-          {currentStep >= 2 && (
-            <div className="form-group child-friendly-group">
-              <div className="step-indicator">
-                <span className="step-number">2</span>
-                <span className="step-label">Email setup</span>
               </div>
+            )}
+
+            {/* Step 2: Email Setup */}
+            {currentStep === 2 && (
+              <div className="form-group child-friendly-group">
+                <div className="step-indicator">
+                  <button
+                    type="button"
+                    className="step-back-button"
+                    onClick={() => setCurrentStep(1)}
+                    aria-label="Go back to role selection"
+                  >
+                    ← Back
+                  </button>
+                  <span className="step-number">2</span>
+                  <span className="step-label">Email setup</span>
+                </div>
               <label htmlFor="email-prefix" className="label-with-icon">
                 <span className="label-icon">📧</span>
                 <span>Your Email</span>
@@ -328,6 +291,16 @@ export function Signup() {
                   name="email-prefix"
                   value={emailPrefix}
                   onChange={handleEmailPrefixChange}
+                  onBlur={() => {
+                    // Clean up trailing period when user finishes typing
+                    if (emailPrefix.endsWith('.')) {
+                      const cleaned = emailPrefix.replace(/\.$/g, '');
+                      setEmailPrefix(cleaned);
+                      if (cleaned) {
+                        setEmail(`${cleaned}@gmail.com`);
+                      }
+                    }
+                  }}
                   required
                   placeholder="Type your name here"
                   className={emailValid === true ? 'input-valid' : emailValid === false ? 'input-invalid' : ''}
@@ -342,7 +315,7 @@ export function Signup() {
                   @gmail.com
                 </button>
               </div>
-              <div className={`email-status-card ${emailValid ? 'is-valid' : ''} ${emailJustValidated ? 'celebrate' : ''}`}>
+              <div className={`email-status-card ${emailValid ? 'is-valid' : ''}`}>
                 {emailPrefix ? (
                   <p>Your login name will be: <strong>{emailPrefix}</strong></p>
                 ) : (
@@ -355,17 +328,29 @@ export function Signup() {
                   <span className="email-preview-value">{email}</span>
                 </div>
               )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {/* Step 3: Password Creation */}
-          {currentStep >= 3 && (
-            <div>
-            <div className="form-group child-friendly-group">
-              <label className="label-with-icon" style={{ justifyContent: 'center' }}>
-                <span>Please choose only one type of password:</span>
-              </label>
-            </div>
+            {/* Step 3: Password Creation */}
+            {currentStep === 3 && (
+              <div>
+                <div className="step-indicator">
+                  <button
+                    type="button"
+                    className="step-back-button"
+                    onClick={() => setCurrentStep(2)}
+                    aria-label="Go back to email setup"
+                  >
+                    ← Back
+                  </button>
+                  <span className="step-number">3</span>
+                  <span className="step-label">Password creation</span>
+                </div>
+                <div className="form-group child-friendly-group">
+                  <label className="label-with-icon" style={{ justifyContent: 'center' }}>
+                    <span>Please choose only one type of password:</span>
+                  </label>
+                </div>
             <div className="password-mode-toggle">
               <button
                 type="button"
@@ -392,7 +377,7 @@ export function Signup() {
                 }}
                 aria-label="Use normal password"
               >
-                Normal Password
+                ⌨️ Typing Password
               </button>
             </div>
 
@@ -457,12 +442,7 @@ export function Signup() {
                 </div>
               </div>
             )}
-            </div>
-          )}
 
-          {/* Step 3: Password Creation */}
-          {currentStep >= 3 && (
-            <div>
             {!useNormalPassword ? (
               <>
                 <IconPasswordSelector
@@ -490,13 +470,7 @@ export function Signup() {
                   <>
                     {passwordIcons.join('-') === confirmPasswordIcons.join('-') ? (
                       <>
-                        {!passwordJustMatched && (() => {
-                          setPasswordJustMatched(true);
-                          playSelectionSound();
-                          setTimeout(() => setPasswordJustMatched(false), 300);
-                          return null;
-                        })()}
-                        <div className={`password-match-check ${passwordJustMatched ? 'celebrate' : ''}`}>
+                        <div className="password-match-check">
                           <span className="match-success">✅ Passwords match! Great job!</span>
                         </div>
                         {/* Visual Password Comparison */}
@@ -564,8 +538,9 @@ export function Signup() {
                 )}
               </>
             )}
-          </div>
+            </div>
           )}
+          </div>
 
           <button
             type="submit"

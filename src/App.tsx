@@ -16,6 +16,9 @@ import { CreateMCQ } from './pages/CreateMCQ';
 import { Loading } from './components/Loading';
 import './App.css';
 
+const routerBasename =
+  import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
+
 function AnimatedRoutes() {
   const location = useLocation();
   const { isNavigating } = useNavigation();
@@ -84,7 +87,7 @@ function AnimatedRoutes() {
 
 function App() {
   return (
-    <Router>
+    <Router basename={routerBasename}>
       <NavigationProvider>
         <AuthProvider>
           <AnimatedRoutes />

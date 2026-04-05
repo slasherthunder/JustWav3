@@ -6,6 +6,7 @@ import {
   signOut,
   onAuthStateChanged,
   sendEmailVerification,
+  sendPasswordResetEmail,
   reload,
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -23,6 +24,7 @@ interface AuthContextType {
   signup: (email: string, password: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   sendVerificationEmail: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   loading: boolean;
 }
 
@@ -44,50 +46,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signup(email: string, password: string, role: UserRole) {
     try {
       await withRateLimit('auth:signup', async () => {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
 
-        // Send email verification
+    // Send email verification
+    try {
+      console.log('Sending verification email to:', user.email);
+      await sendEmailVerification(user, {
+        url: window.location.origin,
+        handleCodeInApp: false,
+      });
+      console.log('Verification email sent successfully');
+    } catch (error: any) {
+      console.error('Error sending verification email:', error);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
+      // Don't throw here - account creation succeeded, just email sending failed
+      // But we'll log it so user can see in console
+    }
+
+    if (user && role) {
+      const payload = {
+        email: user.email,
+        role: role,
+        createdAt: new Date().toISOString(),
+        emailVerified: false,
+      };
+
+      let attempt = 0;
+      let lastError: unknown = null;
+      while (attempt < 3) {
         try {
-          console.log('Sending verification email to:', user.email);
-          await sendEmailVerification(user, {
-            url: window.location.origin,
-            handleCodeInApp: false,
-          });
-          console.log('Verification email sent successfully');
-        } catch (error: any) {
-          console.error('Error sending verification email:', error);
-          console.error('Error code:', error?.code);
-          console.error('Error message:', error?.message);
-          // Don't throw here - account creation succeeded, just email sending failed
-          // But we'll log it so user can see in console
+          await setDoc(doc(db, 'users', user.uid), payload);
+          setUserRole(role);
+          break;
+        } catch (err) {
+          lastError = err;
+          attempt += 1;
+          await new Promise((r) => setTimeout(r, 250 * attempt));
         }
+      }
 
-        if (user && role) {
-          const payload = {
-            email: user.email,
-            role: role,
-            createdAt: new Date().toISOString(),
-            emailVerified: false,
-          };
-
-          let attempt = 0;
-          let lastError: unknown = null;
-          while (attempt < 3) {
-            try {
-              await setDoc(doc(db, 'users', user.uid), payload);
-              setUserRole(role);
-              break;
-            } catch (err) {
-              lastError = err;
-              attempt += 1;
-              await new Promise((r) => setTimeout(r, 250 * attempt));
-            }
-          }
-
-          if (attempt === 3 && lastError) {
-            throw lastError;
-          }
+      if (attempt === 3 && lastError) {
+        throw lastError;
+      }
         }
       }, email);
     } catch (error: any) {
@@ -110,12 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       await withRateLimit('auth:emailVerification', async () => {
-        console.log('Resending verification email to:', currentUser.email);
-        await sendEmailVerification(currentUser, {
-          url: window.location.origin,
-          handleCodeInApp: false,
-        });
-        console.log('Verification email resent successfully');
+    console.log('Resending verification email to:', currentUser.email);
+    await sendEmailVerification(currentUser, {
+      url: window.location.origin,
+      handleCodeInApp: false,
+    });
+    console.log('Verification email resent successfully');
       }, currentUser.email || currentUser.uid);
     } catch (error: any) {
       // Handle rate limit errors specifically
@@ -131,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     try {
       await withRateLimit('auth:login', async () => {
-        await signInWithEmailAndPassword(auth, email, password);
+    await signInWithEmailAndPassword(auth, email, password);
       }, email);
     } catch (error: any) {
       // Handle rate limit errors specifically
@@ -147,6 +149,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     setUserRole(null);
     return signOut(auth);
+  }
+
+  async function resetPassword(email: string) {
+    try {
+      await withRateLimit('auth:passwordReset', async () => {
+        console.log('Sending password reset email to:', email);
+        await sendPasswordResetEmail(auth, email, {
+          url: window.location.origin + '/login',
+          handleCodeInApp: false,
+        });
+        console.log('Password reset email sent successfully');
+      }, email);
+    } catch (error: any) {
+      // Handle rate limit errors specifically
+      if (error.code === 'rate-limit-exceeded') {
+        const retryAfter = error.retryAfter || 3600; // Default to 1 hour
+        const minutes = Math.ceil(retryAfter / 60);
+        throw new Error(`Too many password reset requests. Please try again in ${minutes} minute${minutes > 1 ? 's' : ''}.`);
+      }
+      // Firebase doesn't reveal if email exists, so we show a generic success message
+      // But we still throw to let the UI handle it appropriately
+      throw error;
+    }
   }
 
   useEffect(() => {
@@ -200,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signup,
     logout,
     sendVerificationEmail,
+    resetPassword,
     loading,
   };
 

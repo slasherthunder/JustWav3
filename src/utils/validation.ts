@@ -243,6 +243,13 @@ export function validateLoginInput(data: unknown) {
 }
 
 /**
+ * Validate password reset input
+ */
+export function validatePasswordResetInput(data: unknown) {
+  return validateAndSanitize(passwordResetSchema, data);
+}
+
+/**
  * Validate message input
  */
 export function validateMessageInput(data: unknown) {

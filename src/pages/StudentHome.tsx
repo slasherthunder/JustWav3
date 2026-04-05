@@ -762,7 +762,7 @@ export function StudentHome() {
               transition: 'all 0.3s ease'
             }}
           >
-            🚪
+            logout
           </motion.button>
         </div>
       </motion.header>

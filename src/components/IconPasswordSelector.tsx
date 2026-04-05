@@ -1,25 +1,15 @@
 import { useState } from 'react';
 import './IconPasswordSelector.css';
 
-// High-contrast, distinct emojis grouped by category for better visual distinction
-// Animals (distinct colors/shapes)
-const ANIMALS = ['🦁', '🐢', '🐧', '🦄', '🐙', '🦊'];
-// Nature/Space (simple, iconic)
-const NATURE = ['🌵', '🍄', '🌈', '☀️', '🌙', '🌊'];
-// Foods (high contrast, fun)
-const FOODS = ['🍕', '🍦', '🍩', '🍉', '🍟', '🌮'];
-// Activities (clear icons)
-const ACTIVITIES = ['🎮', '🎨', '🚀', '⚽', '🚲', '🎸'];
-// Objects (sparkly/high-value)
-const OBJECTS = ['🎁', '💎', '🎈', '🔑', '👑', '⭐'];
-
-// Combine all categories for variety
+// High-contrast, distinct emojis - 3x2 grid (6 emojis)
+// Carefully chosen for maximum visual distinction and child appeal
 const PASSWORD_ICONS = [
-  ...ANIMALS,
-  ...NATURE,
-  ...FOODS,
-  ...ACTIVITIES,
-  ...OBJECTS
+  '🦁', // Lion - orange
+  '🐢', // Turtle - green
+  '🦄', // Unicorn - purple/pink
+  '🍕', // Pizza - yellow/brown
+  '🚀', // Rocket - gray/blue
+  '⭐'  // Star - yellow
 ];
 
 interface IconPasswordSelectorProps {
@@ -36,12 +26,6 @@ export function IconPasswordSelector({
   label = "Choose Your Password Icons"
 }: IconPasswordSelectorProps) {
   const [justSelected, setJustSelected] = useState<string | null>(null);
-
-  // Helper to find the order of a selected icon
-  const getIconOrder = (icon: string) => {
-    const index = selectedIcons.indexOf(icon);
-    return index >= 0 ? index + 1 : null;
-  };
 
   const handleIconClick = (icon: string) => {
     if (selectedIcons.includes(icon)) {
@@ -96,7 +80,6 @@ export function IconPasswordSelector({
       <div className="icon-grid">
         {PASSWORD_ICONS.map((icon) => {
           const isSelected = selectedIcons.includes(icon);
-          const order = getIconOrder(icon);
           const isJustSelected = justSelected === icon;
           
           return (
@@ -106,13 +89,10 @@ export function IconPasswordSelector({
               className={`icon-button ${isSelected ? 'selected' : ''} ${isJustSelected ? 'wobble' : ''} ${!isSelected && selectedIcons.length >= maxIcons ? 'disabled' : ''}`}
               onClick={() => handleIconClick(icon)}
               aria-pressed={isSelected}
-              aria-label={isSelected ? `Deselect ${icon} (position ${order})` : `Select ${icon} icon`}
+              aria-label={isSelected ? `Deselect ${icon}` : `Select ${icon} icon`}
               disabled={!isSelected && selectedIcons.length >= maxIcons}
             >
               <span className="icon-emoji">{icon}</span>
-              {isSelected && order && (
-                <span className="order-badge">{order}</span>
-              )}
             </button>
           );
         })}

@@ -96,3 +96,10 @@ If emails still aren't working after these steps:
 3. Verify your Firebase project configuration
 4. Contact Firebase support if needed
 
+## Preventing Emails from Going to Spam
+
+If password reset emails are going to spam, see **[FIREBASE_EMAIL_DELIVERABILITY.md](./FIREBASE_EMAIL_DELIVERABILITY.md)** for comprehensive solutions including:
+- Custom SMTP configuration
+- Email authentication setup (SPF, DKIM, DMARC)
+- Third-party email service integration
+- SendGrid setup guide
