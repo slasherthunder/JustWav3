@@ -1,281 +1,150 @@
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useEffect } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useAuth } from '../contexts/AuthContext';
 import './Landing.css';
 import logoImage from '../assets/images/logo.png';
 
-interface Slide {
-  title: string;
-  icon: string;
-  desc: string;
-  features: string[];
-}
-
 export function Landing() {
   const navigate = useNavigate();
   const { setNavigating } = useNavigation();
   const { currentUser, loading } = useAuth();
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
-  const slides: Slide[] = [
-    {
-      title: "Real-Time Gesture Recognition",
-      icon: "👋",
-      desc: "Control your learning experience with simple hand gestures",
-      features: [
-        "1 Finger = Answer A",
-        "2 Fingers = Answer B", 
-        "3 Fingers = Answer C",
-        "4 Fingers = Answer D",
-        "Thumbs Up = I understand",
-        "Two Thumbs Down = I need help"
-      ]
-    },
-    {
-      title: "Adaptive Learning System",
-      icon: "🎯",
-      desc: "Personalized content delivery that adapts to your learning style",
-      features: ["Tracks your progress", "Adjusts difficulty", "Personalized recommendations"]
-    },
-    {
-      title: "Five Learning Modes",
-      icon: "🔊",
-      desc: "Choose the mode that works best for you",
-      features: ["Audio Mode", "Image Mode", "Icons Mode", "Gesture Mode", "Simple Mode"]
-    },
-    {
-      title: "Progress Tracking & Reports",
-      icon: "📊",
-      desc: "Detailed insights into your learning journey",
-      features: ["Visual progress charts", "Performance analytics", "Learning recommendations"]
-    },
-    {
-      title: "Connect & Collaborate",
-      icon: "💬",
-      desc: "Stay connected with teachers, parents, and students",
-      features: ["Integrated messaging", "Share progress", "Get support"]
-    },
-    {
-      title: "Role-Based Dashboards",
-      icon: "👨‍👩‍👧‍👦",
-      desc: "Tailored experience for every user type",
-      features: ["Student Dashboard", "Teacher Dashboard", "Parent Dashboard"]
-    },
-    {
-      title: "Flexible Authentication",
-      icon: "🔐",
-      desc: "Choose how you want to sign in",
-      features: ["Traditional passwords", "Child-friendly icon passwords", "Secure & simple"]
-    },
-    {
-      title: "Accessibility First",
-      icon: "♿",
-      desc: "Designed with accessibility in mind",
-      features: ["Text size controls", "High contrast mode", "Keyboard navigation", "Screen reader support"]
-    },
-    {
-      title: "Secure & Protected",
-      icon: "🛡️",
-      desc: "Your data and privacy are our priority",
-      features: ["Rate limiting", "Input validation", "Email verification", "Secure data handling"]
-    }
-  ];
-
-  // Redirect authenticated users to their home page
   useEffect(() => {
-    if (!loading && currentUser) {
-      navigate('/home');
-    }
+    if (!loading && currentUser) navigate('/home');
   }, [currentUser, loading, navigate]);
 
-  const handleSignIn = () => {
+  const handleAction = (path: string) => {
     setNavigating(true);
-    navigate('/login');
+    navigate(path);
   };
 
-  const handleSignUp = () => {
-    setNavigating(true);
-    navigate('/signup');
-  };
-
-  const handleTryIt = () => {
-    setNavigating(true);
-    navigate('/learn-demo', { replace: true });
-  };
-
-  const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % slides.length);
-  };
-
-  const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
-  };
-
-  const goToSlide = (index: number) => {
-    setCurrentSlide(index);
-  };
-
-  // Auto-play carousel (pauses on hover/focus)
-  useEffect(() => {
-    if (isPaused) return;
-    
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [isPaused, slides.length]);
-
-  // Show loading while checking authentication
-  if (loading) {
+  if (loading || currentUser) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        fontSize: '18px'
-      }}>
-        Loading...
+      <div className="landing-loading-screen" role="status" aria-live="polite">
+        JustWav3…
       </div>
     );
   }
 
-  // Don't render if user is authenticated (will be redirected)
-  if (currentUser) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        fontSize: '18px'
-      }}>
-        Redirecting...
-      </div>
-    );
-  }
+  const heroTransition = shouldReduceMotion
+    ? { duration: 0 }
+    : { duration: 0.8, ease: [0.22, 1, 0.36, 1] as const };
 
   return (
-    <div className="landing-container">
-      <div className="landing-header">
-        <button 
-          className="landing-auth-button sign-in-button"
-          onClick={handleSignIn}
-          aria-label="Sign in to your account"
-        >
-          Sign In
-        </button>
-        <button 
-          className="landing-auth-button sign-up-button"
-          onClick={handleSignUp}
-          aria-label="Create a new account"
-        >
-          Sign Up
-        </button>
-      </div>
-
-      <main className="landing-main">
-        <div className="landing-content">
-          <div className="landing-header-section">
-            <h1 className="landing-title">
-              <img src={logoImage} alt="JustWav3" style={{ maxHeight: '120px', width: 'auto', height: 'auto' }} />
-            </h1>
-            <p className="landing-subtitle">
-              Adaptive Multimodal Learning Interface with Real-Time Gesture Recognition
-            </p>
-          </div>
-
-          <div 
-            className="carousel-container"
-            onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
-            onFocus={() => setIsPaused(true)}
-            onBlur={() => setIsPaused(false)}
-          >
-            <button
-              className="carousel-button carousel-button-prev"
-              onClick={prevSlide}
-              aria-label="Previous slide"
-              onFocus={() => setIsPaused(true)}
-            >
-              ←
-            </button>
-
-            <div className="carousel-slide-wrapper">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={currentSlide}
-                  className="carousel-slide"
-                  initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: 100 }}
-                  animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-                  exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -100 }}
-                  transition={{ duration: shouldReduceMotion ? 0.1 : 0.3, ease: "easeInOut" }}
-                >
-                  <div className="slide-icon">{slides[currentSlide].icon}</div>
-                  <h2 className="slide-title">{slides[currentSlide].title}</h2>
-                  <p className="slide-description">{slides[currentSlide].desc}</p>
-                  <ul className="slide-features">
-                    {slides[currentSlide].features.map((feature, index) => (
-                      <li key={index}>{feature}</li>
-                    ))}
-                  </ul>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            <button
-              className="carousel-button carousel-button-next"
-              onClick={nextSlide}
-              aria-label="Next slide"
-              onFocus={() => setIsPaused(true)}
-            >
-              →
-            </button>
-          </div>
-
-          <div className="carousel-dots">
-            {slides.map((_, index) => (
-              <button
-                key={index}
-                className={`carousel-dot ${index === currentSlide ? 'active' : ''}`}
-                onClick={() => goToSlide(index)}
-                aria-label={`Go to slide ${index + 1}`}
-                aria-current={index === currentSlide ? 'true' : 'false'}
-              />
-            ))}
-          </div>
-
-          <div className="landing-cta">
-            <button 
-              className="landing-primary-button"
-              onClick={handleSignUp}
-              aria-label="Get started with JustWav3"
-            >
-              Get Started
-            </button>
-            <button 
-              className="landing-try-button"
-              onClick={handleTryIt}
-              aria-label="Try out JustWav3 without signing up"
-            >
-              Try It Out
-            </button>
-            <button 
-              className="landing-secondary-button"
-              onClick={handleSignIn}
-              aria-label="Sign in to existing account"
-            >
-              Already have an account? Sign In
-            </button>
-          </div>
+    <div className="landing-wrapper">
+      <nav className="glass-nav" aria-label="Primary">
+        <img src={logoImage} alt="JustWav3" className="nav-logo" width={140} height={40} />
+        <div className="nav-actions">
+          <button type="button" onClick={() => handleAction('/login')} className="btn-ghost">
+            Sign In
+          </button>
+          <button type="button" onClick={() => handleAction('/signup')} className="btn-primary-sm">
+            Get Started
+          </button>
         </div>
+      </nav>
+
+      <main className="landing-container" id="main-content">
+        <section className="hero-section" aria-labelledby="hero-heading">
+          <motion.div
+            className="hero-inner"
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={heroTransition}
+          >
+            <span className="landing-badge">v2.0 Now Live</span>
+            <h1 id="hero-heading" className="hero-title">
+              Learning at the <br />
+              <span className="text-gradient">Speed of Gesture.</span>
+            </h1>
+            <p className="hero-subtitle">
+              The world’s first adaptive multimodal interface. Control your progress with a wave, a
+              touch, or a glance.
+            </p>
+            <div className="hero-cta-group">
+              <button
+                type="button"
+                onClick={() => handleAction('/signup')}
+                className="btn-primary-lg"
+              >
+                Start Learning Free
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAction('/learn-demo')}
+                className="btn-secondary-lg"
+              >
+                Watch Demo
+              </button>
+            </div>
+          </motion.div>
+        </section>
+
+        <section className="bento-section" aria-labelledby="bento-heading">
+          <h2 id="bento-heading" className="visually-hidden">
+            Product capabilities
+          </h2>
+          <div className="bento-grid">
+            <article className="bento-item main-feature">
+              <div className="bento-content">
+                <h3>Gesture Engine</h3>
+                <p>1–4 fingers for answers. Thumbs up to confirm. Zero latency.</p>
+              </div>
+              <div className="gesture-viz" aria-hidden="true">
+                <div className="gesture-track">
+                  <span className="gesture-finger" data-n="1" />
+                  <span className="gesture-finger" data-n="2" />
+                  <span className="gesture-finger" data-n="3" />
+                  <span className="gesture-finger" data-n="4" />
+                </div>
+                <div className="gesture-pulse" />
+              </div>
+            </article>
+
+            <article className="bento-item accent-1">
+              <h3>Adaptive Paths</h3>
+              <p>Difficulty that breathes with you.</p>
+            </article>
+
+            <article className="bento-item accent-2">
+              <h3>5 Learning Modes</h3>
+              <div className="mode-pills">
+                <span>Audio</span>
+                <span>Visual</span>
+                <span>Icons</span>
+              </div>
+            </article>
+
+            <article className="bento-item wide">
+              <div className="bento-content">
+                <h3>Role-Based Dashboards</h3>
+                <p>Seamless sync between Students, Teachers, and Parents.</p>
+              </div>
+              <div className="dashboard-preview" aria-hidden="true">
+                <div className="dash-sidebar" />
+                <div className="dash-main">
+                  <div className="dash-row dash-header" />
+                  <div className="dash-row" />
+                  <div className="dash-row" />
+                  <div className="dash-cards">
+                    <div className="dash-card" />
+                    <div className="dash-card" />
+                    <div className="dash-card" />
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className="bento-item small">
+              <h3>100% Accessible</h3>
+              <p>WCAG 2.2 compliant.</p>
+            </article>
+          </div>
+        </section>
       </main>
     </div>
   );
 }
-
