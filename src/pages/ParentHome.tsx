@@ -5,7 +5,7 @@ import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
 import './Landing.css';
-import { collection, query as fsQuery, where, limit, getDocs, orderBy, query, addDoc, updateDoc, serverTimestamp, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query as fsQuery, where, limit, getDocs, orderBy, query, addDoc, updateDoc, serverTimestamp, doc, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { Timestamp } from 'firebase/firestore';
@@ -766,6 +766,16 @@ export function ParentHome() {
     }
   }
 
+  async function handleCancelOutgoingParentConnectionRequest(requestId: string) {
+    try {
+      await deleteDoc(doc(db, 'parentConnectionRequests', requestId));
+      await fetchConnections();
+    } catch (error) {
+      console.error('Error canceling request:', error);
+      alert('Failed to cancel request. Please try again.');
+    }
+  }
+
   async function loadStudentReports(studentUid: string, studentEmail?: string) {
     try {
       setLoadingReports(true);
@@ -982,35 +992,37 @@ export function ParentHome() {
           </div>
         </header>
 
-        {/* Connection Requests Section */}
-        {pendingRequests.length > 0 && (
-          <motion.section
-            className="reports-history parent-dashboard-alerts"
-            aria-labelledby="requests-heading"
-            variants={itemVariants}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-              <h3 id="requests-heading" style={{ margin: 0 }}>📬 Connection Requests</h3>
-              <motion.button
-                onClick={fetchConnections}
-                disabled={refreshingConnections}
-                className="logout-button"
-                style={{ padding: '8px 16px', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))' }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                {refreshingConnections ? 'Refreshing...' : '🔄 Refresh'}
-              </motion.button>
+        {/* Connection Requests — always visible (matches teacher dashboard) */}
+        <motion.section
+          className={`reports-history${pendingRequests.length > 0 ? ' parent-dashboard-alerts' : ''}`}
+          aria-labelledby="requests-heading"
+          variants={itemVariants}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+            <h3 id="requests-heading" style={{ margin: 0 }}>📬 Connection Requests</h3>
+            <motion.button
+              onClick={fetchConnections}
+              disabled={refreshingConnections}
+              className="logout-button"
+              style={{ padding: '8px 16px', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))' }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {refreshingConnections ? 'Refreshing...' : '🔄 Refresh'}
+            </motion.button>
+          </div>
+
+          {pendingRequests.length === 0 ? (
+            <div className="reports-empty">
+              <p>No pending connection requests.</p>
+              <p style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.9)' }}>
+                When a student or another parent invites you—or after you send a request—their invite will show here.
+              </p>
             </div>
-            
-            {pendingRequests.length === 0 ? (
-              <div className="reports-empty">
-                <p>No pending connection requests.</p>
-              </div>
-            ) : (
-              <>
-                {/* Incoming Requests */}
-                {pendingRequests.filter(req => req.requestedId === currentUser?.uid).length > 0 && (
+          ) : (
+            <>
+              {/* Incoming Requests */}
+              {pendingRequests.filter(req => req.requestedId === currentUser?.uid).length > 0 && (
                   <div style={{ marginBottom: 'var(--spacing-lg)' }}>
                     <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--primary-color)', fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))' }}>
                       Incoming Requests ({pendingRequests.filter(req => req.requestedId === currentUser?.uid).length})
@@ -1086,15 +1098,25 @@ export function ParentHome() {
                           <p style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)', marginTop: 'var(--spacing-xs)' }}>
                             Sent {request.createdAt ? new Date(request.createdAt.seconds * 1000).toLocaleDateString() : 'recently'}
                           </p>
+                          <motion.button
+                            type="button"
+                            onClick={() => handleCancelOutgoingParentConnectionRequest(request.id)}
+                            className="logout-button"
+                            style={{ marginTop: 'var(--spacing-md)', width: '100%', background: 'var(--text-secondary)' }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            aria-label={`Cancel request to ${request.requestedEmail}`}
+                          >
+                            Cancel request
+                          </motion.button>
                         </motion.div>
                       ))}
                     </div>
                   </div>
                 )}
-              </>
-            )}
-          </motion.section>
-        )}
+            </>
+          )}
+        </motion.section>
 
         <motion.section
           className="reports-history"

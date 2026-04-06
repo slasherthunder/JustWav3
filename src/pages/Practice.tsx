@@ -1,10 +1,10 @@
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './Home.css';
 import './Landing.css';
 import './Practice.css';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import Webcam from 'react-webcam';
 import { Hands } from '@mediapipe/hands';
 import { Camera } from '@mediapipe/camera_utils';
@@ -22,9 +22,40 @@ import threeStickersIcon from '../assets/images/threestickers.png';
 import fourStickersIcon from '../assets/images/fourstickers.png';
 import fiveStickersIcon from '../assets/images/fivestickers.png';
 import sixStickersIcon from '../assets/images/sixstickers.png';
+import oneFingerIcon from '../assets/images/onefinger.png';
+import twoFingersIcon from '../assets/images/twofingers.png';
+import threeFingersIcon from '../assets/images/threefingers.png';
+import fourFingersIcon from '../assets/images/fourfingers.png';
 import { StickerProgress } from '../components/StickerProgress';
+import { AccessibleAnswer } from '../components/AccessibleAnswer';
 
 type LearningMode = 'audio' | 'icons' | 'gesture' | 'simple';
+
+/** Cyan / slate anchors (aligned with Learn tutorial page) */
+const ANSWER_TILE_COLORS = ['#0891b2', '#0e7490', '#155e75', '#164e63'] as const;
+
+/** Simple mode: use teacher-uploaded option image when present, else default sticker by letter. */
+function getSimpleModeOptionImageSrc(ans: { letter: string; optionImage?: string | null }): string {
+  if (ans.optionImage && String(ans.optionImage).trim()) {
+    return String(ans.optionImage).trim();
+  }
+  const L = String(ans.letter).toUpperCase();
+  if (L === 'A') return threeStickersIcon;
+  if (L === 'B') return fourStickersIcon;
+  if (L === 'C') return fiveStickersIcon;
+  return sixStickersIcon;
+}
+
+const ALL_LEARNING_MODES: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
+
+function normalizeActiveModes(raw: unknown): LearningMode[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [...ALL_LEARNING_MODES];
+  const allowed = raw.filter((m): m is LearningMode =>
+    ALL_LEARNING_MODES.includes(m as LearningMode)
+  );
+  return allowed.length > 0 ? allowed : [...ALL_LEARNING_MODES];
+}
+
 type GestureType = 'open' | 'fist' | 'point' | 'wave' | '1' | '2' | '3' | '4' | 'thumbsUp' | 'thumbsDown' | '-';
 
 interface ModeStats {
@@ -89,6 +120,12 @@ export function Practice() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [answerFeedback, setAnswerFeedback] = useState<string | null>(null);
+
+  type LearnFlowStep = 'listen' | 'decide';
+  const [learnFlowStep, setLearnFlowStep] = useState<LearnFlowStep>('decide');
+  const [assistNarrow, setAssistNarrow] = useState(false);
+  const wrongByQuestionRef = useRef<Record<number, number>>({});
+  const [streak, setStreak] = useState(0);
 
   // Buddy Button states
   type BuddyMode = 'none' | 'try-me' | 'practice' | 'help';
@@ -216,19 +253,33 @@ export function Practice() {
           .filter((slide: any) => slide?.question && Array.isArray(slide?.options))
           .map((slide: any, index: number) => {
             const options = slide.options.filter((opt: any) => opt && String(opt).trim() !== '');
-            
+            const optImgs: (string | null)[] = Array.isArray(slide.optionImages)
+              ? slide.optionImages
+              : [];
+            const activeModes = normalizeActiveModes(slide.activeModes);
+
             return {
               text: slide.question || `Question ${index + 1}`,
               answers: options.map((opt: string, idx: number) => ({
                 letter: String.fromCharCode(65 + idx),
-                value: String(opt).trim()
+                value: String(opt).trim(),
+                optionImage: optImgs[idx] && String(optImgs[idx]).trim() ? optImgs[idx] : null,
               })),
               correctAnswer: (slide.correctAnswer || '').trim(),
-              correctAnswers: Array.isArray(slide.correctAnswers) 
+              correctAnswers: Array.isArray(slide.correctAnswers)
                 ? slide.correctAnswers.map((ca: any) => String(ca).trim()).filter(Boolean)
                 : [],
               questionType: slide.questionType || 'multipleChoice',
-              imageData: slide.imageData || null
+              imageData: slide.imageData || null,
+              activeModes,
+              simplifiedQuestion: typeof slide.simplifiedQuestion === 'string' ? slide.simplifiedQuestion : '',
+              simplifiedHint: typeof slide.simplifiedHint === 'string' ? slide.simplifiedHint : '',
+              hint:
+                typeof slide.hint === 'string' && slide.hint.trim()
+                  ? slide.hint.trim()
+                  : typeof slide.simplifiedHint === 'string' && slide.simplifiedHint.trim()
+                    ? slide.simplifiedHint.trim()
+                    : '',
             };
           })
           .filter((q: any) => q.answers.length > 0);
@@ -329,6 +380,13 @@ export function Practice() {
 
     loadAssignment();
   }, [assignmentId, currentUser, navigate]);
+
+  // Keep current mode within teacher-enabled modes when the question changes
+  useEffect(() => {
+    const q = questions[currentQuestionIndex];
+    if (!q?.activeModes?.length) return;
+    setCurrentMode((prev) => (q.activeModes.includes(prev) ? prev : q.activeModes[0]));
+  }, [currentQuestionIndex, questions]);
 
   // Load persistent learning profile
   useEffect(() => {
@@ -705,31 +763,41 @@ export function Practice() {
     }
   }, [successes, attempts, modeStats, currentMode, difficulty]);
 
-  // Auto mode switching
+  // Auto mode switching (only to modes enabled for this question)
   useEffect(() => {
+    const q = questions[currentQuestionIndex];
+    const allowed = q?.activeModes?.length ? q.activeModes : ALL_LEARNING_MODES;
     const currentFrustration = modeStats[currentMode].frustration;
     const currentInteractions = modeStats[currentMode].interactions;
-    
+
     if (currentMode === 'audio' && currentFrustration >= 2 && currentInteractions >= 3 && !autoSwitched) {
-      const iconsFrustration = modeStats.icons.frustration;
-      const simpleFrustration = modeStats.simple.frustration;
-      
-      const targetMode = simpleFrustration < iconsFrustration ? 'simple' : 'icons';
+      const canSimple = allowed.includes('simple');
+      const canIcons = allowed.includes('icons');
+      if (!canSimple && !canIcons) return;
+
+      let targetMode: LearningMode;
+      if (canSimple && canIcons) {
+        targetMode =
+          modeStats.simple.frustration < modeStats.icons.frustration ? 'simple' : 'icons';
+      } else {
+        targetMode = canSimple ? 'simple' : 'icons';
+      }
+
       const reason = `We switched to ${targetMode === 'icons' ? 'Icons' : 'Simple'} Mode because you asked for help ${currentFrustration} time${currentFrustration > 1 ? 's' : ''}.`;
-      
+
       changeMode(targetMode);
       setAutoSwitched(true);
       setSwitchReason(reason);
       setShowSwitchTooltip(true);
       speakText(`Switching to ${targetMode} mode to help you learn better.`);
-      
+
       setTimeout(() => setShowSwitchTooltip(false), 10000);
       setTimeout(() => {
         setAutoSwitched(false);
         setSwitchReason(null);
       }, 30000);
     }
-  }, [modeStats, currentMode, autoSwitched, changeMode]);
+  }, [modeStats, currentMode, autoSwitched, changeMode, questions, currentQuestionIndex]);
 
   const recordSuccess = useCallback(() => {
     const now = Date.now();
@@ -775,7 +843,7 @@ export function Practice() {
       setAnswerFeedback(null);
       setModeStart(Date.now());
     } else {
-      setSessionOver(true);
+      speakText('You have completed all questions!');
     }
   }, [currentQuestionIndex, questions.length]);
 
@@ -786,6 +854,8 @@ export function Practice() {
       setSelectedAnswers([]);
       setAnswerFeedback(null);
       setModeStart(Date.now());
+    } else {
+      speakText('This is the first question');
     }
   }, [currentQuestionIndex]);
 
@@ -850,9 +920,8 @@ export function Practice() {
     return explanations[buttonType] || 'This button helps you interact with the learning interface.';
   };
 
-  // Handle answer selection
+  // Handle answer selection (aligned with Learn / tutorial: manual next question, listen/decide, streak, assist narrow)
   const handleAnswerSelection = useCallback((answer: string) => {
-    // In Try Me mode, show explanation instead of actual action
     if (buddyMode === 'try-me') {
       const explanation = `This button would select Answer ${answer}. In real mode, this would check if your answer is correct.`;
       if ('speechSynthesis' in window) {
@@ -864,60 +933,58 @@ export function Practice() {
       return;
     }
     if (questions.length === 0) return;
-    
-    const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return;
+
+    const cq = questions[currentQuestionIndex];
+    if (!cq) return;
+
+    if ((currentMode === 'icons' || currentMode === 'simple') && learnFlowStep === 'listen') {
+      return;
+    }
 
     playEarcon('tap');
-    
-    if (currentQuestion.questionType === 'multipleChoice') {
-      // Always set the selected answer first so it's visually selected
+
+    if (cq.questionType === 'multipleChoice') {
       setSelectedAnswer(answer);
-      
-      // Support both single correctAnswer and multiple correctAnswers
-      const correctAnswers = currentQuestion.correctAnswers && currentQuestion.correctAnswers.length > 0
-        ? currentQuestion.correctAnswers.map((ca: string) => ca.toUpperCase())
-        : currentQuestion.correctAnswer
-          ? [currentQuestion.correctAnswer.toUpperCase()]
-          : [];
-      
+
+      const correctAnswers =
+        cq.correctAnswers && cq.correctAnswers.length > 0
+          ? cq.correctAnswers.map((ca: string) => String(ca).trim().toUpperCase())
+          : cq.correctAnswer
+            ? [String(cq.correctAnswer).trim().toUpperCase()]
+            : [];
+
       const isCorrect = correctAnswers.includes(answer.toUpperCase());
-      
+
       if (isCorrect) {
         playEarcon('success');
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate(25);
         }
+        setStreak((prev) => prev + 1);
         recordSuccess();
         const correctCount = correctAnswers.length;
         if (correctCount > 1) {
-          setAnswerFeedback(`✅ Correct! ${correctCount > 1 ? 'This is one of the correct answers!' : 'Great job!'}`);
+          setAnswerFeedback(`✅ Correct! This is one of the correct answers!`);
           speakText('Correct! This is one of the correct answers!');
         } else {
           setAnswerFeedback('✅ Correct! Great job!');
           speakText('Correct! Great job!');
         }
-        
-        // Keep the answer selected and visible - don't clear it immediately
-        // Move to next question after showing feedback
         setTimeout(() => {
           setAnswerFeedback(null);
-          if (currentQuestionIndex < questions.length - 1) {
-            setCurrentQuestionIndex(currentQuestionIndex + 1);
-            setSelectedAnswer(null);
-            setSelectedAnswers([]);
-            setAnswerFeedback(null);
-          } else {
-            setAnswerFeedback('🎉 You completed all questions!');
-            setSessionOver(true);
-          }
-        }, 2000);
+        }, 5000);
       } else {
         playEarcon('wrong');
+        setStreak(0);
         setAttempts((a) => a + 1);
+        const idx = currentQuestionIndex;
+        wrongByQuestionRef.current[idx] = (wrongByQuestionRef.current[idx] || 0) + 1;
+        if (wrongByQuestionRef.current[idx] >= 2 && correctAnswers.length === 1) {
+          setAssistNarrow(true);
+        }
         setAnswerFeedback(`❌ Not quite. Try again!`);
         speakText('Try again! You can do it!');
-        
+
         setModeStats((ms) => {
           const updated = {
             ...ms,
@@ -925,15 +992,16 @@ export function Practice() {
               ...ms[currentMode],
               interactions: ms[currentMode].interactions + 1,
               attempts: ms[currentMode].attempts + 1,
-              responseTime: [...ms[currentMode].responseTime, Date.now() - modeStart]
-            }
+              responseTime: [...ms[currentMode].responseTime, Date.now() - modeStart],
+            },
           };
-          updated[currentMode].accuracy = updated[currentMode].attempts > 0
-            ? (updated[currentMode].successes / updated[currentMode].attempts) * 100
-            : 0;
+          updated[currentMode].accuracy =
+            updated[currentMode].attempts > 0
+              ? (updated[currentMode].successes / updated[currentMode].attempts) * 100
+              : 0;
           return updated;
         });
-        
+
         setTimeout(() => {
           setSelectedAnswer(null);
           setAnswerFeedback(null);
@@ -941,37 +1009,75 @@ export function Practice() {
       }
     } else {
       const newSelected = selectedAnswers.includes(answer)
-        ? selectedAnswers.filter(a => a !== answer)
+        ? selectedAnswers.filter((a) => a !== answer)
         : [...selectedAnswers, answer];
       setSelectedAnswers(newSelected);
-      
-      const allCorrectSelected = currentQuestion.correctAnswers.every((ca: string) => newSelected.includes(ca));
-      const noIncorrectSelected = newSelected.every(sel => currentQuestion.correctAnswers.includes(sel));
-      
-      if (allCorrectSelected && noIncorrectSelected && newSelected.length === currentQuestion.correctAnswers.length) {
+
+      const lettersUpper = cq.correctAnswers.map((ca: string) => String(ca).trim().toUpperCase());
+      const allCorrectSelected = lettersUpper.every((ca: string) => newSelected.includes(ca));
+      const noIncorrectSelected = newSelected.every((sel) => lettersUpper.includes(sel));
+
+      if (
+        allCorrectSelected &&
+        noIncorrectSelected &&
+        newSelected.length === cq.correctAnswers.length
+      ) {
         playEarcon('success');
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate(25);
         }
+        setStreak((prev) => prev + 1);
         recordSuccess();
         setAnswerFeedback('✅ Correct! Great job!');
         speakText('Correct! Great job!');
-        
         setTimeout(() => {
           setAnswerFeedback(null);
-          if (currentQuestionIndex < questions.length - 1) {
-            setCurrentQuestionIndex(currentQuestionIndex + 1);
-            setSelectedAnswer(null);
-            setSelectedAnswers([]);
-            setAnswerFeedback(null);
-          } else {
-            setAnswerFeedback('🎉 You completed all questions!');
-            setSessionOver(true);
-          }
+        }, 5000);
+      } else if (newSelected.some((sel) => !lettersUpper.includes(sel))) {
+        playEarcon('wrong');
+        setStreak(0);
+        setAttempts((a) => a + 1);
+        const idx = currentQuestionIndex;
+        wrongByQuestionRef.current[idx] = (wrongByQuestionRef.current[idx] || 0) + 1;
+        if (wrongByQuestionRef.current[idx] >= 2 && cq.correctAnswers.length === 1) {
+          setAssistNarrow(true);
+        }
+        setAnswerFeedback(`❌ Not quite. Try again!`);
+        speakText('Try again! You can do it!');
+        setModeStats((ms) => {
+          const updated = {
+            ...ms,
+            [currentMode]: {
+              ...ms[currentMode],
+              interactions: ms[currentMode].interactions + 1,
+              attempts: ms[currentMode].attempts + 1,
+              responseTime: [...ms[currentMode].responseTime, Date.now() - modeStart],
+            },
+          };
+          updated[currentMode].accuracy =
+            updated[currentMode].attempts > 0
+              ? (updated[currentMode].successes / updated[currentMode].attempts) * 100
+              : 0;
+          return updated;
+        });
+        setTimeout(() => {
+          setSelectedAnswers([]);
+          setAnswerFeedback(null);
         }, 2000);
       }
     }
-  }, [buddyMode, currentQuestionIndex, questions, selectedAnswers, currentMode, modeStart, playEarcon, recordSuccess]);
+  }, [
+    buddyMode,
+    currentQuestionIndex,
+    questions,
+    selectedAnswers,
+    currentMode,
+    modeStart,
+    playEarcon,
+    recordSuccess,
+    learnFlowStep,
+    speakText,
+  ]);
 
   const handleAnswerSelectionRef = useRef(handleAnswerSelection);
   handleAnswerSelectionRef.current = handleAnswerSelection;
@@ -1704,21 +1810,22 @@ export function Practice() {
     };
   }, [mediaReady, currentMode, recordHelp, changeMode, nextItem, recordSuccess]);
 
-  // Active adaptation
+  // Active adaptation (only among modes enabled for this question)
   useEffect(() => {
+    const q = questions[currentQuestionIndex];
+    const allowed = q?.activeModes?.length ? q.activeModes : ALL_LEARNING_MODES;
     const currentFrustration = modeStats[currentMode].frustration;
     const currentAccuracy = modeStats[currentMode].accuracy;
-    
+
     if (currentFrustration >= 3 && currentAccuracy < 50 && modeStats[currentMode].attempts >= 3) {
-      const modes: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
-      const bestAlternative = modes
-        .filter(m => m !== currentMode)
-        .sort((a, b) => {
+      const bestAlternative = allowed
+        .filter((m: LearningMode) => m !== currentMode)
+        .sort((a: LearningMode, b: LearningMode) => {
           const frustrationDiff = modeStats[a].frustration - modeStats[b].frustration;
           if (frustrationDiff !== 0) return frustrationDiff;
           return modeStats[b].accuracy - modeStats[a].accuracy;
         })[0];
-      
+
       if (bestAlternative) {
         setTimeout(() => {
           changeMode(bestAlternative);
@@ -1726,7 +1833,7 @@ export function Practice() {
         }, 2000);
       }
     }
-  }, [modeStats, currentMode, changeMode]);
+  }, [modeStats, currentMode, changeMode, questions, currentQuestionIndex]);
 
   // Calculate progress
   const progress = attempts > 0 ? (successes / attempts) * 100 : 0;
@@ -1772,6 +1879,83 @@ export function Practice() {
     '-': ''
   };
 
+  const currentQuestionPre = questions[currentQuestionIndex];
+  const questionDisplayText = useMemo(() => {
+    if (!currentQuestionPre) return '';
+    const sq = currentQuestionPre.simplifiedQuestion;
+    if (typeof sq === 'string' && sq.trim()) return sq.trim();
+    return currentQuestionPre.text || '';
+  }, [currentQuestionPre]);
+
+  const content = questionDisplayText;
+
+  const displayedAnswers = useMemo(() => {
+    if (!currentQuestionPre?.answers) return [];
+    let list = [...currentQuestionPre.answers];
+    const caRaw =
+      currentQuestionPre.correctAnswers && currentQuestionPre.correctAnswers.length > 0
+        ? currentQuestionPre.correctAnswers
+        : currentQuestionPre.correctAnswer
+          ? [currentQuestionPre.correctAnswer]
+          : [];
+    const ca = caRaw.map((c: string) => String(c).trim());
+    if (assistNarrow && ca.length === 1) {
+      const correctLetter = ca[0];
+      const wrongs = list.filter((a: { letter: string }) => !ca.includes(a.letter));
+      const oneWrong = wrongs[0];
+      if (oneWrong) {
+        list = list.filter(
+          (a: { letter: string }) => a.letter === correctLetter || a.letter === oneWrong.letter
+        );
+      }
+    }
+    return list;
+  }, [currentQuestionPre, assistNarrow]);
+
+  const availableModesPre: LearningMode[] = currentQuestionPre?.activeModes?.length
+    ? currentQuestionPre.activeModes
+    : ALL_LEARNING_MODES;
+
+  const speakQuestionAgain = useCallback(() => {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(questionDisplayText);
+    u.rate = 0.88;
+    speechSynthesis.speak(u);
+  }, [questionDisplayText]);
+
+  useEffect(() => {
+    if (currentMode === 'icons' || currentMode === 'simple') {
+      setLearnFlowStep('listen');
+      setAssistNarrow(false);
+    } else {
+      setLearnFlowStep('decide');
+    }
+  }, [currentMode, currentQuestionIndex]);
+
+  useEffect(() => {
+    if (currentMode !== 'icons' && currentMode !== 'simple') return;
+    if (learnFlowStep !== 'listen') return;
+    if (buddyMode === 'try-me') {
+      setLearnFlowStep('decide');
+      return;
+    }
+    let cancelled = false;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(questionDisplayText);
+    u.rate = 0.88;
+    u.onend = () => {
+      if (!cancelled) setLearnFlowStep('decide');
+    };
+    u.onerror = () => {
+      if (!cancelled) setLearnFlowStep('decide');
+    };
+    speechSynthesis.speak(u);
+    return () => {
+      cancelled = true;
+      speechSynthesis.cancel();
+    };
+  }, [learnFlowStep, currentMode, currentQuestionIndex, questionDisplayText, buddyMode]);
+
   // Loading state
   if (loading) {
     return (
@@ -1816,10 +2000,10 @@ export function Practice() {
     );
   }
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const content = currentQuestion?.text || '';
+  const currentQuestion = currentQuestionPre;
+  const availableModes = availableModesPre;
 
-  // Return the UI (same as your Learn component but with dynamic questions)
+  // Return the UI (aligned with Learn tutorial page; dynamic assignment questions)
   return (
     <motion.div 
       className="learn-container landing-wrapper brand-bg-light learn-page-brand" 
@@ -2109,10 +2293,10 @@ export function Practice() {
             <div className="gesture-info">
               <div className="gesture-display">
                 <div className="gesture-icon">
-                  {gesture === '1' && '1️⃣'}
-                  {gesture === '2' && '2️⃣'}
-                  {gesture === '3' && <img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} />}
-                  {gesture === '4' && '4️⃣'}
+                  {gesture === '1' && <img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '2' && <img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '3' && <img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '4' && <img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
                   {gesture === 'thumbsUp' && '👍'}
                   {gesture === 'thumbsDown' && '👎'}
                   {gesture === '-' && '—'}
@@ -2161,19 +2345,19 @@ export function Practice() {
                 <h3>Gesture Guide</h3>
                 <div className="guide-items">
                   <div className="guide-item">
-                    <span className="guide-icon">1️⃣</span>
+                    <span className="guide-icon"><img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>1 Finger = Answer A</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon">2️⃣</span>
+                    <span className="guide-icon"><img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>2 Fingers = Answer B</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px' }} /></span>
+                    <span className="guide-icon"><img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>3 Fingers = Answer C</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon">4️⃣</span>
+                    <span className="guide-icon"><img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>4 Fingers = Answer D</span>
                   </div>
                   <div className="guide-item">
@@ -2221,8 +2405,8 @@ export function Practice() {
           {/* Right Pane: Adaptive Learning */}
           <motion.div className="learn-pane learning-pane learn-pane--glass" variants={cardVariants}>
             <h2 id="practice-content-heading" className="learn-content-heading">
-              <span className="landing-badge-cyan learn-heading-badge">Practice</span>
-              <span className="learn-content-heading__title">Assignment</span>
+              <span className="landing-badge-cyan learn-heading-badge">Learn</span>
+              <span className="learn-content-heading__title">Adaptive Learning</span>
             </h2>
             
             {showSwitchTooltip && switchReason && (
@@ -2272,6 +2456,7 @@ export function Practice() {
             
             <div className="mode-selector">
               <div className="mode-selector-grid">
+                {availableModes.includes('audio') && (
                 <button 
                   className={`mode-button ${currentMode === 'audio' ? 'active' : ''}`}
                   onClick={() => changeMode('audio')}
@@ -2279,6 +2464,8 @@ export function Practice() {
                   <img src={audioIcon} alt="" className="mode-button-img" width={28} height={28} />
                   Audio
                 </button>
+                )}
+                {availableModes.includes('icons') && (
                 <button 
                   className={`mode-button ${currentMode === 'icons' ? 'active' : ''}`}
                   onClick={() => changeMode('icons')}
@@ -2286,6 +2473,8 @@ export function Practice() {
                   <img src={iconsModeImage} alt="" className="mode-button-img" width={28} height={28} />
                   Icons
                 </button>
+                )}
+                {availableModes.includes('gesture') && (
                 <button 
                   className={`mode-button ${currentMode === 'gesture' ? 'active' : ''}`}
                   onClick={() => changeMode('gesture')}
@@ -2293,6 +2482,8 @@ export function Practice() {
                   <img src={gestureIcon} alt="" className="mode-button-img" width={28} height={28} />
                   Gesture
                 </button>
+                )}
+                {availableModes.includes('simple') && (
                 <button 
                   className={`mode-button ${currentMode === 'simple' ? 'active' : ''}`}
                   onClick={() => changeMode('simple')}
@@ -2300,6 +2491,7 @@ export function Practice() {
                   <img src={simplifyIcon} alt="" className="mode-button-img" width={28} height={28} />
                   Simple
                 </button>
+                )}
               </div>
             </div>
 
@@ -2362,43 +2554,38 @@ export function Practice() {
                         />
                       )}
                       <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
-                        {currentQuestion?.text || 'No question available'}
+                        {questionDisplayText || 'No question available'}
                       </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {(currentQuestion?.answers || []).map((ans: any) => {
-                          // Support both single correctAnswer and multiple correctAnswers
-                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
-                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
-                            : currentQuestion?.correctAnswer
-                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
-                              : [];
-                          
-                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
+                      {currentQuestion?.hint && (
+                        <p className="content-hint" style={{ fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      <div className="answer-choices answer-choices--accessible" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        {(currentQuestion?.answers || []).map((ans: any, idx: number) => {
+                          const caList =
+                            currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                              ? currentQuestion.correctAnswers.map((ca: string) => String(ca).trim())
+                              : currentQuestion?.correctAnswer
+                                ? [String(currentQuestion.correctAnswer).trim()]
+                                : [];
+                          const isCorrect = caList.includes(ans.letter);
                           const isSelected = selectedAnswer === ans.letter;
-                          // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers: show all correct answers in green when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
+                          const showAsCorrect =
+                            (isSelected && isCorrect) ||
+                            (Boolean(selectedAnswer) && isCorrect && caList.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
-                          
+                          const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
                           return (
-                          <div
-                            key={ans.letter}
-                            className={`answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
-                            style={{
-                              padding: 'var(--spacing-md)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              cursor: 'pointer',
-                              fontWeight: isSelected ? 600 : 400
-                            }}
-                            onClick={() => handleAnswerSelection(ans.letter)}
-                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
-                            onMouseLeave={() => setHoveredElement(null)}
-                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
-                          >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
+                            <AccessibleAnswer
+                              key={ans.letter}
+                              letter={ans.letter}
+                              value={ans.value}
+                              color={ANSWER_TILE_COLORS[idx % ANSWER_TILE_COLORS.length]}
+                              isSelected={!!isSelected}
+                              state={tileState}
+                              onClick={() => handleAnswerSelection(ans.letter)}
+                            />
                           );
                         })}
                       </div>
@@ -2433,74 +2620,157 @@ export function Practice() {
                   key={currentQuestionIndex}
                 >
                   <div className="icons-mode">
-                    <div className="content-card">
+                    {streak > 0 && (
+                      <div
+                        className="streak-indicator"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          padding: '0.75rem 1.5rem',
+                          backgroundColor: streak >= 3 ? '#FF6B35' : '#FFA726',
+                          borderRadius: '20px',
+                          color: '#FFFFFF',
+                          fontWeight: 700,
+                          fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+                          boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
+                          marginBottom: 'var(--spacing-md)',
+                          animation: streak >= 3 ? 'pulse 1s ease-in-out infinite' : 'none',
+                        }}
+                      >
+                        {streak >= 3 ? '🔥' : '⭐'} {streak} {streak === 1 ? 'Streak' : 'Streak'}!
+                      </div>
+                    )}
+                    <div
+                      className="content-card"
+                      style={{
+                        backgroundColor: theme.secondary,
+                        borderColor: theme.border,
+                        transition: 'background-color 0.5s ease, border-color 0.5s ease',
+                      }}
+                    >
                       {currentQuestion?.imageData && (
-                        <img 
-                          src={currentQuestion.imageData} 
-                          alt="Question" 
-                          style={{ 
-                            maxWidth: '100%', 
-                            maxHeight: '300px', 
+                        <img
+                          src={currentQuestion.imageData}
+                          alt="Question"
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: '300px',
                             marginBottom: 'var(--spacing-md)',
                             borderRadius: 'var(--border-radius)',
-                            objectFit: 'contain'
-                          }} 
+                            objectFit: 'contain',
+                          }}
                         />
                       )}
-                      <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600 }}>
-                        {currentQuestion?.text || 'No question available'}
+                      <p
+                        className="content-text"
+                        style={{
+                          fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+                          marginBottom: 'var(--spacing-lg)',
+                          fontWeight: 600,
+                          color: theme.text,
+                        }}
+                      >
+                        {questionDisplayText || 'No question available'}
                       </p>
-                      <div className="answer-choices" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-md)' }}>
-                        {(currentQuestion?.answers || []).map((ans: any) => {
-                          // Support both single correctAnswer and multiple correctAnswers
-                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
-                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
-                            : currentQuestion?.correctAnswer
-                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
-                              : [];
-                          
-                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
-                          const isSelected = selectedAnswer === ans.letter;
-                          // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers: show all correct answers in green when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
-                          const showAsIncorrect = isSelected && !isCorrect;
-                          
-                          return (
-                          <motion.button
-                            key={ans.letter}
-                            className={`icon-button answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
-                            onClick={() => handleAnswerSelection(ans.letter)}
-                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
-                            onMouseLeave={() => setHoveredElement(null)}
-                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
-                            whileHover={{ scale: 1.05, y: -2 }}
-                            whileTap={{ scale: 0.95 }}
-                            style={{
-                              padding: 'var(--spacing-lg)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              fontWeight: isSelected ? 600 : 400,
-                              fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))'
-                            }}
+                      {currentQuestion?.hint && (
+                        <p
+                          style={{
+                            fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))',
+                            marginBottom: 'var(--spacing-md)',
+                            color: theme.text,
+                            opacity: 0.85,
+                          }}
+                        >
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      <AnimatePresence mode="wait">
+                        {learnFlowStep === 'listen' && (
+                          <motion.div
+                            key="listen"
+                            className="learn-listen-panel"
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.25 }}
                           >
-                            <span className="icon-emoji icons-mode-sticker-wrap">
-                              {ans.letter === 'A' ? (
-                                <img src={threeStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
-                              ) : ans.letter === 'B' ? (
-                                <img src={fourStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
-                              ) : ans.letter === 'C' ? (
-                                <img src={fiveStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
-                              ) : (
-                                <img src={sixStickersIcon} alt="" className="icons-mode-sticker-img" width={128} height={128} />
-                              )}
-                            </span>
-                            <span className="icon-text"><strong>{ans.letter})</strong> {ans.value}</span>
-                          </motion.button>
-                          );
-                        })}
-                      </div>
+                            <p
+                              className="learn-listen-panel__title"
+                              style={{
+                                color: theme.text,
+                                fontWeight: 700,
+                                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+                              }}
+                            >
+                              Listen to the question…
+                            </p>
+                            <div className="learn-listen-panel__actions">
+                              <button type="button" className="play-button" onClick={speakQuestionAgain}>
+                                <span className="play-icon">🔊</span>
+                                <span>Speak again</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="logout-button learn-ready-btn"
+                                onClick={() => setLearnFlowStep('decide')}
+                              >
+                                I’m ready to answer
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      {assistNarrow && (
+                        <p className="assist-narrow-notice" style={{ marginBottom: 'var(--spacing-md)', fontWeight: 600, color: theme.text }}>
+                          Showing two choices to make it easier.
+                        </p>
+                      )}
+                      {learnFlowStep === 'decide' && (
+                        <div
+                          className="answer-choices answer-choices--accessible answer-choices--icons-grid"
+                          style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-md)' }}
+                        >
+                          {displayedAnswers.map((ans: any) => {
+                            const idx = (currentQuestion?.answers || []).findIndex((a: any) => a.letter === ans.letter);
+                            const colorIdx = idx >= 0 ? idx : 0;
+                            const caList =
+                              currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                                ? currentQuestion.correctAnswers.map((ca: string) => String(ca).trim())
+                                : currentQuestion?.correctAnswer
+                                  ? [String(currentQuestion.correctAnswer).trim()]
+                                  : [];
+                            const isCorrect = caList.includes(ans.letter);
+                            const isSelected = selectedAnswer === ans.letter;
+                            const showAsCorrect =
+                              (isSelected && isCorrect) ||
+                              (Boolean(selectedAnswer) && isCorrect && caList.length > 1);
+                            const showAsIncorrect = isSelected && !isCorrect;
+                            const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
+                            const stickerImg =
+                              ans.optionImage ||
+                              (ans.letter === 'A'
+                                ? threeStickersIcon
+                                : ans.letter === 'B'
+                                  ? fourStickersIcon
+                                  : ans.letter === 'C'
+                                    ? fiveStickersIcon
+                                    : sixStickersIcon);
+                            return (
+                              <AccessibleAnswer
+                                key={ans.letter}
+                                letter={ans.letter}
+                                value={ans.value}
+                                color={ANSWER_TILE_COLORS[colorIdx % ANSWER_TILE_COLORS.length]}
+                                isSelected={!!isSelected}
+                                state={tileState}
+                                onClick={() => handleAnswerSelection(ans.letter)}
+                                visual={<img src={stickerImg} alt="" className="icons-mode-sticker-img" width={128} height={128} />}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
                           {answerFeedback}
@@ -2524,6 +2794,28 @@ export function Practice() {
                   key={currentQuestionIndex}
                 >
                   <div className="gesture-mode">
+                    {streak > 0 && (
+                      <div
+                        className="streak-indicator"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          padding: '0.75rem 1.5rem',
+                          backgroundColor: streak >= 3 ? '#FF6B35' : '#FFA726',
+                          borderRadius: '20px',
+                          color: '#FFFFFF',
+                          fontWeight: 700,
+                          fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+                          boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
+                          marginBottom: 'var(--spacing-md)',
+                          animation: streak >= 3 ? 'pulse 1s ease-in-out infinite' : 'none',
+                          order: -2,
+                        }}
+                      >
+                        {streak >= 3 ? '🔥' : '⭐'} {streak} {streak === 1 ? 'Streak' : 'Streak'}!
+                      </div>
+                    )}
                     <div className="webcam-section gesture-mode-webcam" style={{
                       width: '100%',
                       display: 'flex',
@@ -2599,24 +2891,40 @@ export function Practice() {
                         />
                       )}
                       <p className="content-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, color: theme.text }}>
-                        {currentQuestion?.text || 'No question available'}
+                        {questionDisplayText || 'No question available'}
                       </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {(currentQuestion?.answers || []).map((ans: any) => (
-                          <div
-                            key={ans.letter}
-                            className={`answer-choice ${selectedAnswer === ans.letter ? (ans.letter === currentQuestion?.correctAnswer ? 'correct' : 'incorrect') : ''}`}
-                            style={{
-                              padding: 'var(--spacing-md)',
-                              border: `2px solid ${selectedAnswer === ans.letter ? (ans.letter === currentQuestion?.correctAnswer ? 'var(--success-color)' : 'var(--error-color)') : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: selectedAnswer === ans.letter ? (ans.letter === currentQuestion?.correctAnswer ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)') : 'transparent',
-                              fontWeight: selectedAnswer === ans.letter ? 600 : 400
-                            }}
-                          >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
-                        ))}
+                      {currentQuestion?.hint && (
+                        <p style={{ fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-md)', color: theme.text, opacity: 0.9 }}>
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      <div className="answer-choices answer-choices--accessible" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        {(currentQuestion?.answers || []).map((ans: any, idx: number) => {
+                          const caList =
+                            currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                              ? currentQuestion.correctAnswers.map((ca: string) => String(ca).trim())
+                              : currentQuestion?.correctAnswer
+                                ? [String(currentQuestion.correctAnswer).trim()]
+                                : [];
+                          const isCorrect = caList.includes(ans.letter);
+                          const isSelected = selectedAnswer === ans.letter;
+                          const showAsCorrect =
+                            (isSelected && isCorrect) ||
+                            (Boolean(selectedAnswer) && isCorrect && caList.length > 1);
+                          const showAsIncorrect = isSelected && !isCorrect;
+                          const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
+                          return (
+                            <AccessibleAnswer
+                              key={ans.letter}
+                              letter={ans.letter}
+                              value={ans.value}
+                              color={ANSWER_TILE_COLORS[idx % ANSWER_TILE_COLORS.length]}
+                              isSelected={!!isSelected}
+                              state={tileState}
+                              onClick={() => handleAnswerSelection(ans.letter)}
+                            />
+                          );
+                        })}
                       </div>
                       {answerFeedback && (
                         <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
@@ -2628,28 +2936,28 @@ export function Practice() {
                       <p className="instructions-title">✋ Answer using gestures:</p>
                       <div className="gesture-instructions-grid">
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">1️⃣</span>
+                          <span className="instruction-icon"><img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>1 Finger</strong>
                             <span className="instruction-desc">Answer A</span>
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">2️⃣</span>
+                          <span className="instruction-icon"><img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>2 Fingers</strong>
                             <span className="instruction-desc">Answer B</span>
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                          <span className="instruction-icon"><img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>3 Fingers</strong>
                             <span className="instruction-desc">Answer C</span>
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">4️⃣</span>
+                          <span className="instruction-icon"><img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>4 Fingers</strong>
                             <span className="instruction-desc">Answer D</span>
@@ -2688,64 +2996,186 @@ export function Practice() {
                   key={currentQuestionIndex}
                 >
                   <div className="simple-mode">
+                    {streak > 0 && (
+                      <div
+                        className="streak-indicator"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          padding: '0.75rem 1.5rem',
+                          backgroundColor: streak >= 3 ? '#FF6B35' : '#FFA726',
+                          borderRadius: '20px',
+                          color: '#FFFFFF',
+                          fontWeight: 700,
+                          fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+                          boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
+                          marginBottom: 'var(--spacing-md)',
+                          animation: streak >= 3 ? 'pulse 1s ease-in-out infinite' : 'none',
+                        }}
+                      >
+                        {streak >= 3 ? '🔥' : '⭐'} {streak} {streak === 1 ? 'Streak' : 'Streak'}!
+                      </div>
+                    )}
                     <div className="content-card simplified">
                       {currentQuestion?.imageData && (
-                        <img 
-                          src={currentQuestion.imageData} 
-                          alt="Question" 
-                          style={{ 
-                            maxWidth: '100%', 
-                            maxHeight: '300px', 
+                        <img
+                          src={currentQuestion.imageData}
+                          alt="Question"
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: '300px',
                             marginBottom: 'var(--spacing-md)',
                             borderRadius: 'var(--border-radius)',
-                            objectFit: 'contain'
-                          }} 
+                            objectFit: 'contain',
+                          }}
                         />
                       )}
-                      <p className="simple-text" style={{ fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))', marginBottom: 'var(--spacing-lg)', fontWeight: 600, lineHeight: '1.6' }}>
-                        {currentQuestion?.text || 'No question available'}
+                      {Array.isArray(currentQuestion?.answers) && currentQuestion.answers.length > 0 && (
+                        <div className="simple-mode-sticker-strip" aria-hidden={true}>
+                          {currentQuestion.answers.map((ans: { letter: string; optionImage?: string | null }) => (
+                            <div key={ans.letter} className="simple-mode-sticker-strip__item">
+                              <img
+                                src={getSimpleModeOptionImageSrc(ans)}
+                                alt=""
+                                className="simple-mode-sticker-strip__img"
+                                width={80}
+                                height={80}
+                              />
+                              <span className="simple-mode-sticker-strip__label">{ans.letter}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p
+                        className="simple-text"
+                        style={{
+                          fontSize: 'calc(var(--font-size-xl) * var(--text-size-multiplier))',
+                          marginBottom: 'var(--spacing-lg)',
+                          fontWeight: 700,
+                          lineHeight: 1.55,
+                          color: '#000000',
+                          whiteSpace: 'pre-line',
+                        }}
+                      >
+                        {questionDisplayText || 'No question available'}
                       </p>
-                      <div className="answer-choices" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        {(currentQuestion?.answers || []).map((ans: any) => {
-                          // Support both single correctAnswer and multiple correctAnswers
-                          const correctAnswers = currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
-                            ? currentQuestion.correctAnswers.map((ca: string) => String(ca).toUpperCase().trim())
-                            : currentQuestion?.correctAnswer
-                              ? [String(currentQuestion.correctAnswer).toUpperCase().trim()]
-                              : [];
-                          
-                          const isCorrect = correctAnswers.includes(ans.letter.toUpperCase());
-                          const isSelected = selectedAnswer === ans.letter;
-                          // Show green only if this specific answer is selected AND it's correct
-                          // For multiple correct answers: show all correct answers in green when a correct one is selected
-                          const showAsCorrect = isSelected && isCorrect || (selectedAnswer && isCorrect && correctAnswers.length > 1);
-                          const showAsIncorrect = isSelected && !isCorrect;
-                          
-                          return (
-                          <div
-                            key={ans.letter}
-                            className={`answer-choice explainable ${showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : ''}`}
-                            style={{
-                              padding: 'var(--spacing-md)',
-                              border: `2px solid ${showAsCorrect ? 'var(--success-color)' : showAsIncorrect ? 'var(--error-color)' : 'var(--border-color)'}`,
-                              borderRadius: 'var(--border-radius)',
-                              backgroundColor: showAsCorrect ? 'rgba(34, 197, 94, 0.1)' : showAsIncorrect ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                              cursor: 'pointer',
-                              fontWeight: isSelected ? 600 : 400,
-                              fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 1.1)'
-                            }}
-                            onClick={() => handleAnswerSelection(ans.letter)}
-                            onMouseEnter={() => buddyMode === 'try-me' && setHoveredElement(`answer-${ans.letter.toLowerCase()}`)}
-                            onMouseLeave={() => setHoveredElement(null)}
-                            data-buddy-type={`answer-${ans.letter.toLowerCase()}`}
+                      {currentQuestion?.hint && (
+                        <p style={{ marginBottom: 'var(--spacing-md)', fontWeight: 600, color: '#000000' }}>
+                          💡 {currentQuestion.hint}
+                        </p>
+                      )}
+                      {currentQuestion?.activeModes?.includes('simple') && currentQuestion?.simplifiedHint?.trim() && (
+                        <p
+                          className="simple-hint-buddy"
+                          style={{
+                            marginBottom: 'var(--spacing-lg)',
+                            padding: 'var(--spacing-md)',
+                            borderRadius: 'var(--border-radius)',
+                            background: 'rgba(8, 145, 178, 0.08)',
+                            border: '1px solid rgba(8, 145, 178, 0.25)',
+                            fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier))',
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          💡 <strong>Buddy hint:</strong> {currentQuestion.simplifiedHint.trim()}
+                        </p>
+                      )}
+                      <AnimatePresence mode="wait">
+                        {learnFlowStep === 'listen' && (
+                          <motion.div
+                            key="listen-simple"
+                            className="learn-listen-panel"
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.25 }}
                           >
-                            <strong>{ans.letter})</strong> {ans.value}
-                          </div>
-                          );
-                        })}
-                      </div>
+                            <p
+                              className="learn-listen-panel__title"
+                              style={{
+                                fontWeight: 700,
+                                fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+                                color: '#000000',
+                              }}
+                            >
+                              Listen to the question…
+                            </p>
+                            <div className="learn-listen-panel__actions">
+                              <button type="button" className="play-button" onClick={speakQuestionAgain}>
+                                <span className="play-icon">🔊</span>
+                                <span>Speak again</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="logout-button learn-ready-btn"
+                                onClick={() => setLearnFlowStep('decide')}
+                              >
+                                I’m ready to answer
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      {assistNarrow && (
+                        <p style={{ marginBottom: 'var(--spacing-md)', fontWeight: 700, color: '#000000' }}>
+                          Showing two choices to make it easier.
+                        </p>
+                      )}
+                      {learnFlowStep === 'decide' && (
+                        <div className="answer-choices answer-choices--accessible" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', width: '100%' }}>
+                          {displayedAnswers.map((ans: any) => {
+                            const idx = (currentQuestion?.answers || []).findIndex((a: any) => a.letter === ans.letter);
+                            const colorIdx = idx >= 0 ? idx : 0;
+                            const caList =
+                              currentQuestion?.correctAnswers && currentQuestion.correctAnswers.length > 0
+                                ? currentQuestion.correctAnswers.map((ca: string) => String(ca).trim())
+                                : currentQuestion?.correctAnswer
+                                  ? [String(currentQuestion.correctAnswer).trim()]
+                                  : [];
+                            const isCorrect = caList.includes(ans.letter);
+                            const isSelected = selectedAnswer === ans.letter;
+                            const showAsCorrect =
+                              (isSelected && isCorrect) ||
+                              (Boolean(selectedAnswer) && isCorrect && caList.length > 1);
+                            const showAsIncorrect = isSelected && !isCorrect;
+                            const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
+                            return (
+                              <AccessibleAnswer
+                                key={ans.letter}
+                                letter={ans.letter}
+                                value={ans.value}
+                                color={ANSWER_TILE_COLORS[colorIdx % ANSWER_TILE_COLORS.length]}
+                                isSelected={!!isSelected}
+                                state={tileState}
+                                onClick={() => handleAnswerSelection(ans.letter)}
+                                visual={
+                                  <img
+                                    src={getSimpleModeOptionImageSrc(ans)}
+                                    alt=""
+                                    className="simple-mode-answer-sticker-img"
+                                    width={72}
+                                    height={72}
+                                  />
+                                }
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
                       {answerFeedback && (
-                        <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-md)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(102, 126, 234, 0.1)', fontWeight: 600 }}>
+                        <div
+                          style={{
+                            marginTop: 'var(--spacing-md)',
+                            padding: 'var(--spacing-md)',
+                            borderRadius: 0,
+                            backgroundColor: '#FFFFFF',
+                            border: '4px solid #000000',
+                            color: '#000000',
+                            fontWeight: 700,
+                            fontSize: 'calc(var(--font-size-lg) * var(--text-size-multiplier))',
+                          }}
+                        >
                           {answerFeedback}
                         </div>
                       )}

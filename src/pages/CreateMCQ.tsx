@@ -19,13 +19,49 @@ interface Connection {
   teacherEmail: string;
 }
 
-interface Slide {
+export type SlideMode = 'audio' | 'icons' | 'gesture' | 'simple';
+
+export interface Slide {
   question: string;
   questionType: 'multipleChoice' | 'multipleCorrect';
   options: string[];
   correctAnswer: string;
   correctAnswers: string[];
   imageData: string | null;
+  activeModes: SlideMode[];
+  optionImages: (string | null)[];
+  simplifiedHint?: string;
+  simplifiedQuestion?: string;
+}
+
+const DEFAULT_ACTIVE_MODES: SlideMode[] = ['audio', 'gesture'];
+
+interface McqSlidePayload {
+  question: string;
+  questionType: 'multipleChoice' | 'multipleCorrect';
+  options: string[];
+  correctAnswer: string;
+  correctAnswers: string[];
+  imageData: string | null;
+  activeModes: SlideMode[];
+  optionImages: (string | null)[];
+  simplifiedQuestion: string;
+  simplifiedHint: string;
+}
+
+function createEmptySlide(): Slide {
+  return {
+    question: '',
+    questionType: 'multipleChoice',
+    options: ['', '', '', ''],
+    correctAnswer: '',
+    correctAnswers: [],
+    imageData: null,
+    activeModes: [...DEFAULT_ACTIVE_MODES],
+    optionImages: [null, null, null, null],
+    simplifiedHint: '',
+    simplifiedQuestion: '',
+  };
 }
 
 export function CreateMCQ() {
@@ -33,16 +69,7 @@ export function CreateMCQ() {
   const { setNavigating } = useNavigation();
   const { currentUser } = useAuth();
   const [title, setTitle] = useState('');
-  const [slides, setSlides] = useState<Slide[]>([
-    {
-      question: '',
-      questionType: 'multipleChoice',
-      options: ['', '', '', ''],
-      correctAnswer: '',
-      correctAnswers: [],
-      imageData: null,
-    },
-  ]);
+  const [slides, setSlides] = useState<Slide[]>([createEmptySlide()]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -65,6 +92,8 @@ export function CreateMCQ() {
     { value: 'multipleChoice', label: 'Multiple Choice (Single Answer)' },
     { value: 'multipleCorrect', label: 'Multiple Choice (Multiple Answers)' },
   ];
+
+  const MODE_ORDER: SlideMode[] = ['audio', 'icons', 'gesture', 'simple'];
 
   const currentSlide = slides[currentSlideIndex];
 
@@ -158,17 +187,7 @@ export function CreateMCQ() {
   };
 
   const handleAddSlide = () => {
-    setSlides([
-      ...slides,
-      {
-        question: '',
-        questionType: 'multipleChoice',
-        options: ['', '', '', ''],
-        correctAnswer: '',
-        correctAnswers: [],
-        imageData: null,
-      },
-    ]);
+    setSlides([...slides, createEmptySlide()]);
     setCurrentSlideIndex(slides.length);
   };
 
@@ -197,6 +216,9 @@ export function CreateMCQ() {
   const handleAddOption = () => {
     const newSlides = [...slides];
     newSlides[currentSlideIndex].options.push('');
+    const imgs = [...(newSlides[currentSlideIndex].optionImages || [])];
+    imgs.push(null);
+    newSlides[currentSlideIndex].optionImages = imgs;
     setSlides(newSlides);
   };
 
@@ -204,6 +226,9 @@ export function CreateMCQ() {
     const newSlides = [...slides];
     if (newSlides[currentSlideIndex].options.length > 2) {
       newSlides[currentSlideIndex].options.splice(index, 1);
+      const imgs = [...(newSlides[currentSlideIndex].optionImages || [])];
+      imgs.splice(index, 1);
+      newSlides[currentSlideIndex].optionImages = imgs;
       setSlides(newSlides);
     } else {
       setError('At least 2 options are required');
@@ -239,16 +264,79 @@ export function CreateMCQ() {
     setSlides(newSlides);
   };
 
+  const toggleMode = (mode: SlideMode) => {
+    setSlides((prev) => {
+      const next = [...prev];
+      const slide = { ...next[currentSlideIndex] };
+      const cur = [...(slide.activeModes?.length ? slide.activeModes : DEFAULT_ACTIVE_MODES)];
+      const pos = cur.indexOf(mode);
+      if (pos >= 0) {
+        if (cur.length <= 1) return prev;
+        cur.splice(pos, 1);
+      } else {
+        cur.push(mode);
+      }
+      slide.activeModes = cur;
+      next[currentSlideIndex] = slide;
+      return next;
+    });
+  };
+
+  const handleOptionImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.match('image.*')) {
+      setError('Please select an image file (JPEG, PNG, etc.)');
+      return;
+    }
+
+    if (file.size > 600 * 1024) {
+      setError('Option icon image must be smaller than 600KB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const data = event.target?.result as string;
+      setSlides((prev) => {
+        const next = [...prev];
+        const slide = { ...next[currentSlideIndex] };
+        const imgs = [...(slide.optionImages || [])];
+        while (imgs.length < slide.options.length) imgs.push(null);
+        imgs[index] = data;
+        slide.optionImages = imgs;
+        next[currentSlideIndex] = slide;
+        return next;
+      });
+      setError('');
+    };
+    reader.onerror = () => setError('Failed to read image file');
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const clearOptionImage = (index: number) => {
+    const newSlides = [...slides];
+    const imgs = [...(newSlides[currentSlideIndex].optionImages || [])];
+    while (imgs.length < newSlides[currentSlideIndex].options.length) imgs.push(null);
+    imgs[index] = null;
+    newSlides[currentSlideIndex].optionImages = imgs;
+    setSlides(newSlides);
+  };
+
   const convertToCSV = () => {
     if (!title) {
       setError('Please add a title before exporting');
       return null;
     }
 
-    let csv = 'Question,QuestionType,Option1,Option2,Option3,Option4,CorrectAnswer,CorrectAnswers,ImageData\n';
+    let csv =
+      'Question,QuestionType,Option1,Option2,Option3,Option4,CorrectAnswer,CorrectAnswers,ImageData,ActiveModes,SimplifiedQuestion,SimplifiedHint\n';
 
     slides.forEach((slide) => {
       const imageData = slide.imageData ? slide.imageData.split(',')[1] || slide.imageData : '';
+      const modes = (slide.activeModes?.length ? slide.activeModes : DEFAULT_ACTIVE_MODES).join('|');
       const row = [
         `"${(slide.question || '').replace(/"/g, '""')}"`,
         `"${slide.questionType || 'multipleChoice'}"`,
@@ -256,6 +344,9 @@ export function CreateMCQ() {
         `"${(slide.correctAnswer || '').replace(/"/g, '""')}"`,
         `"${(slide.correctAnswers || []).join('|').replace(/"/g, '""')}"`,
         imageData ? `"${imageData}"` : '""',
+        `"${modes.replace(/"/g, '""')}"`,
+        `"${(slide.simplifiedQuestion || '').replace(/"/g, '""')}"`,
+        `"${(slide.simplifiedHint || '').replace(/"/g, '""')}"`,
       ].join(',');
 
       csv += row + '\n';
@@ -360,12 +451,20 @@ export function CreateMCQ() {
         if (slide.imageData) {
           const imageSizeBytes = slide.imageData.length;
           const estimatedSizeKB = (imageSizeBytes * 3) / 4 / 1024;
-          
+
           if (estimatedSizeKB > 600) {
             imageValidationError = `Image in slide ${i + 1} is too large (${estimatedSizeKB.toFixed(0)}KB). Maximum size is 600KB. Please use a smaller image.`;
             break;
           }
         }
+        (slide.optionImages || []).forEach((img, j) => {
+          if (img && imageValidationError === null) {
+            const kb = (img.length * 3) / 4 / 1024;
+            if (kb > 600) {
+              imageValidationError = `Option icon ${j + 1} on question ${i + 1} is too large (${kb.toFixed(0)}KB). Maximum is 600KB.`;
+            }
+          }
+        });
       }
       
       if (imageValidationError) {
@@ -375,22 +474,26 @@ export function CreateMCQ() {
       }
 
       // Prepare slides data, ensuring all fields are valid
-      const slidesData = slides.map((slide, index) => {
-        const slideData: any = {
+      const slidesData: McqSlidePayload[] = slides.map((slide, index) => {
+        const keptIndices = slide.options
+          .map((opt, i) => (opt.trim() !== '' ? i : -1))
+          .filter((i) => i >= 0);
+        const filteredOptions = keptIndices.map((i) => slide.options[i].trim());
+        const filteredOptionImages = keptIndices.map((i) => slide.optionImages?.[i] ?? null);
+
+        const slideData: McqSlidePayload = {
           question: slide.question.trim(),
           questionType: slide.questionType,
-          options: slide.options.filter(opt => opt.trim() !== ''), // Remove empty options
+          options: filteredOptions,
           correctAnswer: slide.correctAnswer.trim(),
-          correctAnswers: (slide.correctAnswers || []).filter(ans => ans.trim() !== ''), // Remove empty answers
+          correctAnswers: (slide.correctAnswers || []).filter((ans) => ans.trim() !== ''),
+          imageData: slide.imageData ?? null,
+          activeModes:
+            slide.activeModes?.length ? slide.activeModes : [...DEFAULT_ACTIVE_MODES],
+          optionImages: filteredOptionImages,
+          simplifiedQuestion: slide.simplifiedQuestion?.trim() || '',
+          simplifiedHint: slide.simplifiedHint?.trim() || '',
         };
-
-        // Only include imageData if it exists and is valid
-        // Note: Base64 images can be large. Consider using Firebase Storage for images in production
-        if (slide.imageData) {
-          slideData.imageData = slide.imageData;
-        } else {
-          slideData.imageData = null;
-        }
 
         console.log(`🟢 [CreateMCQ] Slide ${index + 1} prepared:`, {
           hasQuestion: !!slideData.question,
@@ -398,7 +501,8 @@ export function CreateMCQ() {
           questionType: slideData.questionType,
           optionsCount: slideData.options.length,
           hasCorrectAnswer: !!slideData.correctAnswer,
-          hasImageData: !!slideData.imageData
+          hasImageData: !!slideData.imageData,
+          activeModes: slideData.activeModes,
         });
 
         return slideData;
@@ -605,8 +709,8 @@ export function CreateMCQ() {
         variants={itemVariants}
       >
         <div className="create-mcq-nav-brand">
-          <span className="landing-badge-cyan learn-heading-badge">Create</span>
-          <span className="create-mcq-nav-title">MCQ practice set</span>
+          <span className="landing-badge-cyan learn-heading-badge">Teacher Studio</span>
+          <span className="create-mcq-nav-title hero-title-dark">Create Assignment</span>
         </div>
         <div className="nav-actions learn-nav-actions create-mcq-nav-actions">
           <motion.button
@@ -627,7 +731,17 @@ export function CreateMCQ() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            ← Back
+            Cancel
+          </motion.button>
+          <motion.button
+            type="submit"
+            form="create-mcq-form"
+            className="btn-cyan-solid-lg"
+            disabled={isSaving}
+            whileHover={{ scale: isSaving ? 1 : 1.02 }}
+            whileTap={{ scale: isSaving ? 1 : 0.98 }}
+          >
+            {isSaving ? 'Saving…' : 'Save & exit'}
           </motion.button>
         </div>
       </motion.nav>
@@ -660,207 +774,216 @@ export function CreateMCQ() {
           </motion.div>
         )}
 
-        <div className="create-mcq-content">
-          {/* Preview Section */}
-          <motion.div className="preview-section" variants={itemVariants}>
-            <div className="preview-header">
-              <div className="create-mcq-section-title">
-                <span className="landing-badge-cyan create-mcq-heading-badge">Preview</span>
-                <span className="learn-content-heading__title">Current question</span>
-              </div>
-              <motion.button
-                type="button"
-                onClick={() => handleDeleteSlide(currentSlideIndex)}
-                className="delete-slide-button"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                disabled={slides.length === 1}
-              >
-                Delete
-              </motion.button>
-            </div>
-
-            <div className="preview-card">
-              <div className="preview-title">{title || 'Set Title'}</div>
-              <div className="preview-question">{currentSlide.question || 'Question:'}</div>
-
-              {currentSlide.imageData && (
-                <div className="preview-image-container">
-                  <img src={currentSlide.imageData} alt="Question" className="preview-image" />
-                  <button
-                    onClick={handleRemoveImage}
-                    className="remove-image-button"
-                    aria-label="Remove image"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-
-              <div className="preview-answers">
-                {currentSlide.questionType === 'multipleChoice' &&
-                  currentSlide.options.map((option, index) => (
-                    <div
-                      key={index}
-                      className={`preview-option ${
-                        duplicateOptions.includes(index) ? 'duplicate' : ''
-                      } ${option === currentSlide.correctAnswer ? 'correct' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        checked={option === currentSlide.correctAnswer}
-                        readOnly
-                        className="preview-radio"
-                      />
-                      <span>{option || `Option ${index + 1}`}</span>
-                    </div>
-                  ))}
-
-                {currentSlide.questionType === 'multipleCorrect' &&
-                  currentSlide.options.map((option, index) => (
-                    <div
-                      key={index}
-                      className={`preview-option ${
-                        duplicateOptions.includes(index) ? 'duplicate' : ''
-                      } ${currentSlide.correctAnswers.includes(option) ? 'correct' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={currentSlide.correctAnswers.includes(option)}
-                        readOnly
-                        className="preview-checkbox"
-                      />
-                      <span>{option || `Option ${index + 1}`}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Edit Section */}
-          <motion.div className="edit-section" variants={itemVariants}>
-            <div className="create-mcq-section-title">
-              <span className="landing-badge-cyan create-mcq-heading-badge">Edit</span>
-              <span className="learn-content-heading__title">Question & options</span>
-            </div>
-            <form onSubmit={handleSubmit} className="edit-form">
-              {/* Set Title */}
-              <div className="form-group">
-                <label htmlFor="title">Title:</label>
-                <input
-                  id="title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="form-input"
-                  placeholder="Enter set title"
-                  required
-                />
-              </div>
-
-              {/* Slide Navigation */}
-              <div className="form-group">
-                <label>Questions:</label>
-                <div className="slide-navigation">
-                  {slides.map((_, index) => (
-                    <motion.button
-                      key={index}
-                      type="button"
-                      onClick={() => setCurrentSlideIndex(index)}
-                      className={`slide-button ${
-                        currentSlideIndex === index ? 'active' : ''
-                      }`}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {index + 1}
-                    </motion.button>
-                  ))}
+        <form id="create-mcq-form" onSubmit={handleSubmit} className="create-mcq-form-outer">
+          <div className="create-mcq-grid">
+            <section className="editor-column">
+              <motion.div className="bento-card bento-card-light" variants={itemVariants}>
+                <div className="bento-card-head">
+                  <h3 className="bento-heading-dark">Question context</h3>
                   <motion.button
                     type="button"
-                    onClick={handleAddSlide}
-                    className="add-slide-button"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleDeleteSlide(currentSlideIndex)}
+                    className="delete-slide-button"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    disabled={slides.length === 1}
                   >
-                    + Add
+                    Delete question
                   </motion.button>
                 </div>
-              </div>
-
-              {/* Question */}
-              <div className="form-group">
-                <label htmlFor="question">Question:</label>
-                <textarea
-                  id="question"
-                  value={currentSlide.question}
-                  onChange={(e) => handleQuestionChange(e.target.value)}
-                  className="form-textarea"
-                  placeholder="Enter your question"
-                  rows={3}
+                <label className="visually-hidden" htmlFor="mcq-set-title">
+                  Assignment title
+                </label>
+                <input
+                  id="mcq-set-title"
+                  className="form-input-large"
+                  placeholder="Question set title (e.g. Math Quiz 1)"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
                   required
                 />
-              </div>
-
-              {/* Question Type */}
-              <div className="form-group">
-                <label htmlFor="question-type">Question Type:</label>
-                <select
-                  id="question-type"
-                  value={currentSlide.questionType}
-                  onChange={(e) =>
-                    handleQuestionTypeChange(
-                      e.target.value as 'multipleChoice' | 'multipleCorrect'
-                    )
-                  }
-                  className="form-select"
-                >
-                  {questionTypes.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
+                <div className="slide-pills" role="tablist" aria-label="Questions">
+                  {slides.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      role="tab"
+                      aria-selected={currentSlideIndex === i}
+                      className={`slide-pill ${currentSlideIndex === i ? 'active' : ''}`}
+                      onClick={() => setCurrentSlideIndex(i)}
+                    >
+                      {i + 1}
+                    </button>
                   ))}
-                </select>
-              </div>
-
-              {/* Image Upload */}
-              <div className="form-group">
-                <label htmlFor="image">Image (Optional):</label>
-                <label className="image-upload-label">
-                  <input
-                    id="image"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="image-upload-input"
+                  <button type="button" className="slide-pill add" onClick={handleAddSlide}>
+                    +
+                  </button>
+                </div>
+                <div className="form-group create-mcq-field">
+                  <label htmlFor="question">Question</label>
+                  <textarea
+                    id="question"
+                    value={currentSlide.question}
+                    onChange={(e) => handleQuestionChange(e.target.value)}
+                    className="form-textarea"
+                    placeholder="Enter your question"
+                    rows={4}
+                    required
                   />
-                  <span className="image-upload-text">
-                    {currentSlide.imageData ? 'Replace Image' : '📷 Upload Image'}
-                  </span>
-                </label>
-              </div>
+                </div>
+                <div className="form-group create-mcq-field">
+                  <label htmlFor="question-type">Question type</label>
+                  <select
+                    id="question-type"
+                    value={currentSlide.questionType}
+                    onChange={(e) =>
+                      handleQuestionTypeChange(
+                        e.target.value as 'multipleChoice' | 'multipleCorrect'
+                      )
+                    }
+                    className="form-select"
+                  >
+                    {questionTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group create-mcq-field">
+                  <label htmlFor="image">Image (optional)</label>
+                  <label className="image-upload-label">
+                    <input
+                      id="image"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="image-upload-input"
+                    />
+                    <span className="image-upload-text">
+                      {currentSlide.imageData ? 'Replace image' : 'Upload image'}
+                    </span>
+                  </label>
+                  {currentSlide.imageData && (
+                    <div className="create-mcq-thumb-wrap">
+                      <img src={currentSlide.imageData} alt="" className="create-mcq-thumb" />
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="remove-image-button create-mcq-thumb-remove"
+                        aria-label="Remove image"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
 
-              {/* Options - Multiple Choice */}
-              {(currentSlide.questionType === 'multipleChoice' ||
-                currentSlide.questionType === 'multipleCorrect') && (
-                <div className="form-group">
-                  <label>Options:</label>
-                  <div className="options-list">
-                    {currentSlide.options.map((option, index) => (
-                      <div key={index} className="option-input-group">
+              <motion.div className="bento-card bento-card-main" variants={itemVariants}>
+                <h3 className="bento-heading-cyan">Multimodal settings</h3>
+                <p className="bento-text-muted">
+                  Choose which learning modes students can use for this question.
+                </p>
+                <div className="mode-toggle-grid">
+                  {MODE_ORDER.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => toggleMode(mode)}
+                      className={`mode-config-btn ${
+                        (currentSlide.activeModes?.length
+                          ? currentSlide.activeModes
+                          : DEFAULT_ACTIVE_MODES
+                        ).includes(mode)
+                          ? 'enabled'
+                          : ''
+                      }`}
+                    >
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {currentSlide.activeModes.includes('simple') && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mode-sub-form"
+                  >
+                    <label className="sub-label" htmlFor="simplified-q">
+                      Simplified question text
+                    </label>
+                    <textarea
+                      id="simplified-q"
+                      className="form-textarea mode-sub-textarea"
+                      placeholder="Shorter or easier-to-read wording…"
+                      value={currentSlide.simplifiedQuestion ?? ''}
+                      onChange={(e) => {
+                        const s = [...slides];
+                        s[currentSlideIndex].simplifiedQuestion = e.target.value;
+                        setSlides(s);
+                      }}
+                      rows={3}
+                    />
+                    <label className="sub-label" htmlFor="simplified-hint">
+                      Hint for Buddy assistant
+                    </label>
+                    <input
+                      id="simplified-hint"
+                      className="form-input"
+                      placeholder="e.g. Try counting the red apples"
+                      value={currentSlide.simplifiedHint ?? ''}
+                      onChange={(e) => {
+                        const s = [...slides];
+                        s[currentSlideIndex].simplifiedHint = e.target.value;
+                        setSlides(s);
+                      }}
+                    />
+                  </motion.div>
+                )}
+              </motion.div>
+            </section>
+
+            <section className="options-column">
+              <motion.div className="bento-card bento-card-light" variants={itemVariants}>
+                <h3 className="bento-heading-dark">Answer options</h3>
+                <p className="bento-text-muted">
+                  Mark the correct answer(s). With Icons mode on, add an optional image per option.
+                </p>
+                <div className="options-editor-list">
+                  {currentSlide.options.map((option, idx) => (
+                    <div key={idx} className="option-row-complex">
+                      <div className="option-main">
+                        {currentSlide.questionType === 'multipleChoice' ? (
+                          <input
+                            type="radio"
+                            name="mcq-correct"
+                            checked={currentSlide.correctAnswer === option && option.trim() !== ''}
+                            onChange={() => handleCorrectAnswerChange(option)}
+                            aria-label={`Correct answer ${idx + 1}`}
+                          />
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={currentSlide.correctAnswers.includes(option)}
+                            onChange={(e) =>
+                              handleMultipleCorrectChange(option, e.target.checked)
+                            }
+                            aria-label={`Mark option ${idx + 1} as correct`}
+                          />
+                        )}
                         <input
-                          type="text"
-                          value={option}
-                          onChange={(e) => handleOptionChange(index, e.target.value)}
-                          className={`option-input ${
-                            duplicateOptions.includes(index) ? 'duplicate' : ''
+                          className={`option-text-input ${
+                            duplicateOptions.includes(idx) ? 'duplicate' : ''
                           }`}
-                          placeholder={`Option ${index + 1}`}
+                          value={option}
+                          placeholder={`Option ${idx + 1}`}
+                          onChange={(e) => handleOptionChange(idx, e.target.value)}
                         />
                         {currentSlide.options.length > 2 && (
                           <button
                             type="button"
-                            onClick={() => handleRemoveOption(index)}
+                            onClick={() => handleRemoveOption(idx)}
                             className="remove-option-button"
                             aria-label="Remove option"
                           >
@@ -868,83 +991,39 @@ export function CreateMCQ() {
                           </button>
                         )}
                       </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={handleAddOption}
-                      className="add-option-button"
-                    >
-                      + Add Option
-                    </button>
-                  </div>
+                      {currentSlide.activeModes.includes('icons') && (
+                        <div className="option-icon-upload">
+                          <label className="icon-dropzone">
+                            {(currentSlide.optionImages?.[idx] ? 'Change icon' : 'Add icon') +
+                              ' (Icons mode)'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              hidden
+                              onChange={(e) => handleOptionImageUpload(idx, e)}
+                            />
+                          </label>
+                          {currentSlide.optionImages?.[idx] && (
+                            <button
+                              type="button"
+                              className="icon-remove-btn"
+                              onClick={() => clearOptionImage(idx)}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              )}
-
-              {/* Correct Answer - Single Choice */}
-              {currentSlide.questionType === 'multipleChoice' && (
-                <div className="form-group">
-                  <label htmlFor="correct-answer">Correct Answer:</label>
-                  <select
-                    id="correct-answer"
-                    value={currentSlide.correctAnswer}
-                    onChange={(e) => handleCorrectAnswerChange(e.target.value)}
-                    className="form-select"
-                    required
-                  >
-                    <option value="">Select correct answer</option>
-                    {currentSlide.options.map((option, index) => (
-                      <option key={index} value={option}>
-                        {option || `Option ${index + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Multiple Correct Answers */}
-              {currentSlide.questionType === 'multipleCorrect' && (
-                <div className="form-group">
-                  <label>Correct Answers:</label>
-                  <div className="correct-answers-list">
-                    {currentSlide.options.map((option, index) => (
-                      <label key={index} className="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={currentSlide.correctAnswers.includes(option)}
-                          onChange={(e) =>
-                            handleMultipleCorrectChange(option, e.target.checked)
-                          }
-                          className="checkbox-input"
-                        />
-                        <span>{option || `Option ${index + 1}`}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <div className="button-group">
-                <motion.button
-                  type="submit"
-                  className="btn-cyan-solid-lg"
-                  disabled={isSaving}
-                  whileHover={{ scale: isSaving ? 1 : 1.02 }}
-                  whileTap={{ scale: isSaving ? 1 : 0.98 }}
-                >
-                  {isSaving ? 'Saving…' : 'Save set'}
-                </motion.button>
-                <motion.button
-                  type="button"
-                  onClick={handleBack}
-                  className="btn-outline-dark-lg"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  Cancel
-                </motion.button>
-              </div>
-            </form>
+                <button type="button" onClick={handleAddOption} className="add-option-button">
+                  + Add option
+                </button>
+              </motion.div>
+            </section>
+          </div>
+        </form>
 
             {/* Assign Assignment Section */}
             {savedMcqSetId && (
@@ -1102,8 +1181,6 @@ export function CreateMCQ() {
                 )}
               </motion.div>
             )}
-          </motion.div>
-        </div>
       </main>
     </motion.div>
   );

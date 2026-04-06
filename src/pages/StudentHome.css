@@ -356,12 +356,23 @@
 }
 
 .student-adventure-helper-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.5rem;
   background: #ebf8ff;
-  padding: 0.65rem 0.85rem;
+  padding: 0.45rem 0.65rem;
   border-radius: 14px;
   border: 2px solid #bee3f8;
   cursor: default;
+}
+
+.student-adventure-helper-pill__avatar {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 8px;
 }
 
 .student-adventure--contrast .student-adventure-helper-pill {

@@ -417,6 +417,14 @@
 .gesture-icon {
   font-size: 4rem;
   margin-bottom: var(--spacing-sm);
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gesture-icon img {
+  object-fit: contain;
 }
 
 .gesture-label {
@@ -566,8 +574,13 @@
 
 .guide-icon {
   font-size: 1.5rem;
-  width: 32px;
+  min-width: 56px;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .progress-section {
@@ -1068,8 +1081,13 @@
 
 .instruction-icon {
   font-size: 2rem;
-  width: 48px;
+  min-width: 56px;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .instruction-desc {

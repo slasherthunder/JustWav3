@@ -6,7 +6,7 @@ import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, Timestamp, getDocs, doc, updateDoc, getDoc, limit, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { setTTSProvider, getTTSProvider, setElevenLabsApiKey, getElevenLabsApiKey, speakText as ttsSpeakText, stopSpeaking as ttsStopSpeaking } from '../utils/ttsService';
+import { speakText as ttsSpeakText, stopSpeaking as ttsStopSpeaking } from '../utils/ttsService';
 import { validateMessageInput, validateSearchQuery } from '../utils/validation';
 import './Home.css';
 import './Landing.css';
@@ -17,6 +17,7 @@ import parentProfileImage from '../assets/images/parentprofile.png';
 import studentProfileImage from '../assets/images/studentprofile.png';
 import audioIcon from '../assets/images/audioicon.png';
 import { SimplifyIcon } from '../components/SimplifyIcon';
+import { useAppAccessibility } from '../contexts/AppAccessibilityContext';
 
 declare global {
   interface Window {
@@ -133,6 +134,7 @@ export function Messages() {
   const [showReactionPickerFor, setShowReactionPickerFor] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [typingStatus, setTypingStatus] = useState<{ [userId: string]: boolean }>({});
   const [typingTimeoutRef, setTypingTimeoutRef] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -151,7 +153,17 @@ export function Messages() {
     speakingMessageIdRef.current = speakingMessageId;
   }, [speakingMessageId]);
 
-  const [simplificationMode, setSimplificationMode] = useState(false);
+  const {
+    messagesContainerClassNames: containerClassNames,
+    simplificationMode,
+    setSimplificationMode,
+    showAccessibilitySettings,
+    setShowAccessibilitySettings,
+    ttsProvider,
+    elevenLabsApiKey,
+    messageSpacing,
+    viewMode,
+  } = useAppAccessibility();
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -278,63 +290,6 @@ export function Messages() {
       } catch (e) {}
     }
   }, [isListening]);
-  const [messageSpacing, setMessageSpacing] = useState<'compact' | 'comfortable'>(() => {
-    const saved = localStorage.getItem('messages-spacing');
-    return (saved === 'compact' || saved === 'comfortable') ? saved : 'comfortable';
-  });
-  const [colorTheme, setColorTheme] = useState<'default' | 'high-contrast'>(() => {
-    const saved = localStorage.getItem('messages-theme');
-    return (saved === 'default' || saved === 'high-contrast') ? saved : 'default';
-  });
-  const [fontPreference, setFontPreference] = useState<'default' | 'opendyslexic'>(() => {
-    const saved = localStorage.getItem('messages-font');
-    return (saved === 'default' || saved === 'opendyslexic') ? saved : 'default';
-  });
-  const [viewMode, setViewMode] = useState<'compact' | 'comfortable'>(() => {
-    const saved = localStorage.getItem('messages-view-mode');
-    return (saved === 'compact' || saved === 'comfortable') ? saved : 'comfortable';
-  });
-  const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false);
-  const [ttsProvider, setTtsProvider] = useState<'browser' | 'elevenlabs'>(() => {
-    return getTTSProvider() as 'browser' | 'elevenlabs';
-  });
-  const [elevenLabsApiKey, setElevenLabsApiKeyState] = useState<string>(() => {
-    return getElevenLabsApiKey() || '';
-  });
-  useEffect(() => {
-    localStorage.setItem('messages-spacing', messageSpacing);
-  }, [messageSpacing]);
-
-  useEffect(() => {
-    localStorage.setItem('messages-theme', colorTheme);
-  }, [colorTheme]);
-
-  useEffect(() => {
-    localStorage.setItem('messages-font', fontPreference);
-  }, [fontPreference]);
-
-  useEffect(() => {
-    localStorage.setItem('messages-view-mode', viewMode);
-  }, [viewMode]);
-
-  useEffect(() => {
-    setTTSProvider(ttsProvider);
-  }, [ttsProvider]);
-
-  // Load OpenDyslexic font if selected
-  useEffect(() => {
-    if (fontPreference === 'opendyslexic') {
-      // Check if font is already loaded
-      const existingLink = document.querySelector('link[data-opendyslexic]');
-      if (!existingLink) {
-        const link = document.createElement('link');
-        link.setAttribute('data-opendyslexic', 'true');
-        link.href = 'https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/open-dyslexic.css';
-        link.rel = 'stylesheet';
-        document.head.appendChild(link);
-      }
-    }
-  }, [fontPreference]);
 
   useEffect(() => {
     if (!currentUser || !userRole) return;
@@ -1336,6 +1291,48 @@ export function Messages() {
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!currentUser) return;
+    try {
+      setDeletingMessageId(messageId);
+      const messageRef = doc(db, 'messages', messageId);
+      const messageDoc = await getDoc(messageRef);
+      if (!messageDoc.exists()) {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        return;
+      }
+      if (messageDoc.data().senderId !== currentUser.uid) {
+        alert('You can only delete messages you sent.');
+        return;
+      }
+      await deleteDoc(messageRef);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      if (playingVoiceMessageId === messageId && audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current.currentTime = 0;
+        audioPlayerRef.current = null;
+        setPlayingVoiceMessageId(null);
+      }
+      if (transcribingMessageId === messageId) {
+        setTranscribingMessageId(null);
+      }
+      setClosedTranscripts((prev) => {
+        const next = new Set(prev);
+        next.delete(messageId);
+        return next;
+      });
+      if (editingMessageId === messageId) {
+        cancelEditing();
+      }
+      setShowReactionPickerFor((prev) => (prev === messageId ? null : prev));
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      alert('Could not delete message. Please try again.');
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   // Start/stop voice recording
   const startRecording = async () => {
     try {
@@ -2266,6 +2263,15 @@ export function Messages() {
     }
   };
 
+  const cancelOutgoingMessageRequest = async (requestId: string) => {
+    try {
+      await deleteDoc(doc(db, 'messageRequests', requestId));
+      setMessageRequests((prev) => prev.filter((req) => req.id !== requestId));
+    } catch (error) {
+      console.error('Error canceling message request:', error);
+    }
+  };
+
   const goBack = () => {
     setNavigating(true);
     navigate('/home');
@@ -3172,38 +3178,6 @@ export function Messages() {
     };
   }, [isResizing]);
 
-  // Close accessibility settings panel when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (showAccessibilitySettings && 
-          !target.closest('.accessibility-settings-panel') && 
-          !target.closest('.messages-accessibility-toggle')) {
-        setShowAccessibilitySettings(false);
-      }
-    };
-
-    if (showAccessibilitySettings) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showAccessibilitySettings]);
-
-  const containerClassNames = [
-    'messages-app-wrapper',
-    'landing-wrapper',
-    'brand-bg-light',
-    'messages-container',
-    'messages-ui-modern',
-    `spacing-${messageSpacing}`,
-    `theme-${colorTheme}`,
-    `font-${fontPreference}`,
-    `view-${viewMode}`
-  ].join(' ');
-
   const [announcement, setAnnouncement] = useState('');
   const announcementRef = useRef<HTMLDivElement>(null);
 
@@ -3270,204 +3244,7 @@ export function Messages() {
             <span className="messages-nav-sub">Chat with your learning circle</span>
           </div>
         </div>
-        <div className="nav-actions">
-          <motion.button
-            type="button"
-            onClick={() => setShowAccessibilitySettings(!showAccessibilitySettings)}
-            className="btn-cyan-solid messages-accessibility-toggle"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            aria-label="Accessibility settings"
-            aria-expanded={showAccessibilitySettings}
-          >
-            Accessibility
-          </motion.button>
-        </div>
       </nav>
-
-      <div className="messages-a11y-quick-bar" role="toolbar" aria-label="Quick accessibility">
-        <button
-          type="button"
-          className={`messages-a11y-quick-bar__btn ${simplificationMode ? 'is-active' : ''}`}
-          onClick={() => setSimplificationMode(!simplificationMode)}
-          aria-pressed={simplificationMode}
-        >
-          <SimplifyIcon size={18} className="messages-a11y-quick-bar__simplify-icon" />
-          {simplificationMode ? 'Detailed view' : 'Simplify text'}
-        </button>
-        <button
-          type="button"
-          className={`messages-a11y-quick-bar__btn ${fontPreference === 'opendyslexic' ? 'is-active' : ''}`}
-          onClick={() => setFontPreference(fontPreference === 'opendyslexic' ? 'default' : 'opendyslexic')}
-          aria-pressed={fontPreference === 'opendyslexic'}
-        >
-          {fontPreference === 'opendyslexic' ? 'Standard font' : 'Dyslexia-friendly font'}
-        </button>
-      </div>
-
-      {showAccessibilitySettings && (
-        <motion.div
-          className="accessibility-settings-panel"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-        >
-          <div className="accessibility-settings-header">
-            <h3>Accessibility Settings</h3>
-            <button
-              onClick={() => setShowAccessibilitySettings(false)}
-              className="close-settings-button"
-              aria-label="Close settings"
-            >
-              ✕
-            </button>
-          </div>
-          
-          <div className="accessibility-settings-content">
-            <div className="setting-group">
-              <label htmlFor="message-spacing">Message Spacing</label>
-              <div className="setting-options">
-                <button
-                  id="message-spacing-compact"
-                  className={`setting-option ${messageSpacing === 'compact' ? 'active' : ''}`}
-                  onClick={() => setMessageSpacing('compact')}
-                  aria-pressed={messageSpacing === 'compact'}
-                >
-                  Compact
-                </button>
-                <button
-                  id="message-spacing-comfortable"
-                  className={`setting-option ${messageSpacing === 'comfortable' ? 'active' : ''}`}
-                  onClick={() => setMessageSpacing('comfortable')}
-                  aria-pressed={messageSpacing === 'comfortable'}
-                >
-                  Comfortable
-                </button>
-              </div>
-            </div>
-
-            <div className="setting-group">
-              <label htmlFor="color-theme">Color Theme</label>
-              <div className="setting-options">
-                <button
-                  id="color-theme-default"
-                  className={`setting-option ${colorTheme === 'default' ? 'active' : ''}`}
-                  onClick={() => setColorTheme('default')}
-                  aria-pressed={colorTheme === 'default'}
-                >
-                  Default
-                </button>
-                <button
-                  id="color-theme-high-contrast"
-                  className={`setting-option ${colorTheme === 'high-contrast' ? 'active' : ''}`}
-                  onClick={() => setColorTheme('high-contrast')}
-                  aria-pressed={colorTheme === 'high-contrast'}
-                >
-                  High Contrast
-                </button>
-              </div>
-            </div>
-
-            <div className="setting-group">
-              <label htmlFor="font-preference">Font</label>
-              <div className="setting-options">
-                <button
-                  id="font-default"
-                  className={`setting-option ${fontPreference === 'default' ? 'active' : ''}`}
-                  onClick={() => setFontPreference('default')}
-                  aria-pressed={fontPreference === 'default'}
-                >
-                  Default
-                </button>
-                <button
-                  id="font-opendyslexic"
-                  className={`setting-option ${fontPreference === 'opendyslexic' ? 'active' : ''}`}
-                  onClick={() => setFontPreference('opendyslexic')}
-                  aria-pressed={fontPreference === 'opendyslexic'}
-                >
-                  OpenDyslexic
-                </button>
-              </div>
-            </div>
-
-            <div className="setting-group">
-              <label htmlFor="view-mode">View Mode</label>
-              <div className="setting-options">
-                <button
-                  id="view-mode-compact"
-                  className={`setting-option ${viewMode === 'compact' ? 'active' : ''}`}
-                  onClick={() => setViewMode('compact')}
-                  aria-pressed={viewMode === 'compact'}
-                >
-                  Compact
-                </button>
-                <button
-                  id="view-mode-comfortable"
-                  className={`setting-option ${viewMode === 'comfortable' ? 'active' : ''}`}
-                  onClick={() => setViewMode('comfortable')}
-                  aria-pressed={viewMode === 'comfortable'}
-                >
-                  Comfortable
-                </button>
-              </div>
-            </div>
-
-            <div className="setting-group">
-              <label htmlFor="tts-provider">Text-to-Speech Provider</label>
-              <div className="setting-options">
-                <button
-                  id="tts-provider-browser"
-                  className={`setting-option ${ttsProvider === 'browser' ? 'active' : ''}`}
-                  onClick={() => setTtsProvider('browser')}
-                  aria-pressed={ttsProvider === 'browser'}
-                >
-                  Browser (Default)
-                </button>
-                <button
-                  id="tts-provider-elevenlabs"
-                  className={`setting-option ${ttsProvider === 'elevenlabs' ? 'active' : ''}`}
-                  onClick={() => setTtsProvider('elevenlabs')}
-                  aria-pressed={ttsProvider === 'elevenlabs'}
-                >
-                  ElevenLabs
-                </button>
-              </div>
-              {ttsProvider === 'elevenlabs' && (
-                <div style={{ marginTop: '0.75rem' }}>
-                  <label htmlFor="elevenlabs-api-key" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                    ElevenLabs API Key (optional)
-                  </label>
-                  <input
-                    type="password"
-                    id="elevenlabs-api-key"
-                    value={elevenLabsApiKey}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setElevenLabsApiKeyState(value);
-                      setElevenLabsApiKey(value || null);
-                    }}
-                    placeholder="Enter your API key"
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-color)',
-                      fontSize: '0.875rem'
-                    }}
-                  />
-                  <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    Get your API key from{' '}
-                    <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)' }}>
-                      elevenlabs.io
-                    </a>
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      )}
 
       <div
         className="messages-content messages-content--grid messages-layout"
@@ -3777,8 +3554,19 @@ export function Messages() {
                                   {formatTime(request.createdAt)}
                                 </div>
                               </div>
-                              <div className="request-status">
+                              <div className="request-actions request-actions--outgoing">
                                 <span className="status-badge pending">Pending</span>
+                                <button
+                                  type="button"
+                                  className="cancel-outgoing-request-button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    cancelOutgoingMessageRequest(request.id);
+                                  }}
+                                  aria-label={`Cancel message request to ${request.requestedEmail}`}
+                                >
+                                  Cancel request
+                                </button>
                               </div>
                             </motion.div>
                           ))}
@@ -4056,6 +3844,27 @@ export function Messages() {
                                   title="Edit message"
                                 >
                                   ✏️
+                                </button>
+                              )}
+                              {msg.senderId === currentUser?.uid && (
+                                <button
+                                  type="button"
+                                  className="delete-message-button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      window.confirm(
+                                        'Delete this message? The other person will no longer see it. This cannot be undone.'
+                                      )
+                                    ) {
+                                      void handleDeleteMessage(msg.id);
+                                    }
+                                  }}
+                                  disabled={deletingMessageId === msg.id}
+                                  title="Delete message"
+                                  aria-label="Delete message"
+                                >
+                                  {deletingMessageId === msg.id ? '…' : '🗑️'}
                                 </button>
                               )}
                             </div>

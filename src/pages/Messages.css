@@ -1401,6 +1401,29 @@
   flex-shrink: 0;
 }
 
+.request-actions.request-actions--outgoing {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: auto;
+}
+
+.cancel-outgoing-request-button {
+  padding: 8px 14px;
+  border-radius: 4px;
+  font-size: calc(var(--font-size-xs) * var(--text-size-multiplier));
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+}
+
+.cancel-outgoing-request-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .loading, .empty-state, .no-conversation-selected {
   padding: var(--spacing-xl) var(--spacing-2xl);
   text-align: center;
@@ -2012,6 +2035,28 @@
 .edit-message-button:hover {
   opacity: 1;
   transform: scale(1.1);
+}
+
+.delete-message-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: calc(var(--font-size-xs) * var(--text-size-multiplier));
+  opacity: 0.55;
+  margin-left: 6px;
+  padding: 2px 4px;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  vertical-align: middle;
+}
+
+.delete-message-button:hover:not(:disabled) {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.delete-message-button:disabled {
+  cursor: wait;
+  opacity: 0.35;
 }
 
 /* Voice Message Styles */

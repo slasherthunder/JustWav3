@@ -273,10 +273,6 @@ export function Login() {
 
   return (
     <div className="auth-container child-friendly">
-      <a href="#login-form" className="skip-link">
-        Skip to login form
-      </a>
-      
       <Link to="/" className="back-to-main-button">
         ← Back to Main
       </Link>

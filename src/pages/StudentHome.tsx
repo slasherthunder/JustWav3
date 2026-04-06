@@ -3,12 +3,13 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, query, orderBy, Timestamp, query as fsQuery, where, limit, addDoc, serverTimestamp, doc, updateDoc, onSnapshot, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp, query as fsQuery, where, limit, addDoc, serverTimestamp, doc, updateDoc, onSnapshot, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
 import { getAssignmentsByStudent } from '../utils/assignments';
 import type { Assignment } from '../types/assignments';
+import { syncDocumentAccessibilityFromStorage } from '../accessibility/syncDocumentAccessibility';
 import './Home.css';
 import './StudentHome.css';
 import teacherProfileImage from '../assets/images/teacherprofile.png';
@@ -98,8 +99,15 @@ export function StudentHome() {
   const { currentUser, logout } = useAuth();
   const { setNavigating } = useNavigation();
   const navigate = useNavigate();
-  const [textSize, setTextSize] = useState(1.125);
-  const [highContrast, setHighContrast] = useState(false);
+  const [textSize, setTextSize] = useState(() => {
+    const saved = localStorage.getItem('home-text-size');
+    if (!saved) return 1;
+    const n = parseFloat(saved);
+    return Number.isFinite(n) ? n : 1;
+  });
+  const [highContrast, setHighContrast] = useState(
+    () => localStorage.getItem('home-high-contrast') === 'true'
+  );
   const [reports, setReports] = useState<LearningReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
   
@@ -145,13 +153,9 @@ export function StudentHome() {
   };
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--text-size-multiplier', textSize.toString());
-    
-    if (highContrast) {
-      document.body.classList.add('high-contrast');
-    } else {
-      document.body.classList.remove('high-contrast');
-    }
+    localStorage.setItem('home-text-size', textSize.toString());
+    localStorage.setItem('home-high-contrast', highContrast.toString());
+    syncDocumentAccessibilityFromStorage();
   }, [textSize, highContrast]);
 
   // Fetch notification counts (unread messages and pending requests)
@@ -655,6 +659,26 @@ export function StudentHome() {
     }
   }
 
+  async function handleCancelOutgoingTeacherRequest(requestId: string) {
+    try {
+      await deleteDoc(doc(db, 'connectionRequests', requestId));
+      await fetchConnections();
+    } catch (error) {
+      console.error('Error canceling teacher request:', error);
+      alert('Failed to cancel request. Please try again.');
+    }
+  }
+
+  async function handleCancelOutgoingParentRequest(requestId: string) {
+    try {
+      await deleteDoc(doc(db, 'parentConnectionRequests', requestId));
+      await fetchConnections();
+    } catch (error) {
+      console.error('Error canceling parent request:', error);
+      alert('Failed to cancel request. Please try again.');
+    }
+  }
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -894,7 +918,13 @@ export function StudentHome() {
                   role="img"
                   aria-label={`Teacher ${t.teacherEmail}`}
                 >
-                  👩‍🏫
+                  <img
+                    src={teacherProfileImage}
+                    alt=""
+                    className="student-adventure-helper-pill__avatar"
+                    width={28}
+                    height={28}
+                  />
                 </span>
               ))}
               {myParents.map((p) => (
@@ -905,7 +935,13 @@ export function StudentHome() {
                   role="img"
                   aria-label={`Parent ${p.parentEmail}`}
                 >
-                  🏠
+                  <img
+                    src={parentProfileImage}
+                    alt=""
+                    className="student-adventure-helper-pill__avatar"
+                    width={28}
+                    height={28}
+                  />
                 </span>
               ))}
               {myTeachers.length === 0 && myParents.length === 0 && (
@@ -1278,6 +1314,17 @@ export function StudentHome() {
                           </div>
                           <h4>{request.requestedEmail}</h4>
                           <p style={{ color: 'var(--text-secondary)' }}>Waiting for their answer…</p>
+                          <motion.button
+                            type="button"
+                            onClick={() => handleCancelOutgoingTeacherRequest(request.id)}
+                            className="student-adventure-btn-secondary"
+                            style={{ marginTop: 'var(--spacing-md)', width: '100%' }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            aria-label={`Cancel request to ${request.requestedEmail}`}
+                          >
+                            Cancel request
+                          </motion.button>
                         </motion.div>
                       ))}
                   </div>
@@ -1365,6 +1412,17 @@ export function StudentHome() {
                           </div>
                           <h4>{request.requestedEmail}</h4>
                           <p style={{ color: 'var(--text-secondary)' }}>Waiting for their answer…</p>
+                          <motion.button
+                            type="button"
+                            onClick={() => handleCancelOutgoingParentRequest(request.id)}
+                            className="student-adventure-btn-secondary"
+                            style={{ marginTop: 'var(--spacing-md)', width: '100%' }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            aria-label={`Cancel request to ${request.requestedEmail}`}
+                          >
+                            Cancel request
+                          </motion.button>
                         </motion.div>
                       ))}
                   </div>

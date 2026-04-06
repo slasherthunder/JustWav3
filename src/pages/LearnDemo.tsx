@@ -19,6 +19,10 @@ import threeStickersIcon from "../assets/images/threestickers.png";
 import fourStickersIcon from "../assets/images/fourstickers.png";
 import fiveStickersIcon from "../assets/images/fivestickers.png";
 import sixStickersIcon from "../assets/images/sixstickers.png";
+import oneFingerIcon from '../assets/images/onefinger.png';
+import twoFingersIcon from '../assets/images/twofingers.png';
+import threeFingersIcon from '../assets/images/threefingers.png';
+import fourFingersIcon from '../assets/images/fourfingers.png';
 
 type LearningMode = 'audio' | 'icons' | 'gesture' | 'simple';
 type GestureType = 'open' | 'fist' | 'point' | 'wave' | '1' | '2' | '3' | '4' | 'thumbsUp' | 'thumbsDown' | '-';
@@ -1541,10 +1545,10 @@ export function LearnDemo() {
             <div className="gesture-info">
               <div className="gesture-display">
                 <div className="gesture-icon">
-                  {gesture === '1' && '1️⃣'}
-                  {gesture === '2' && '2️⃣'}
-                  {gesture === '3' && <img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} />}
-                  {gesture === '4' && '4️⃣'}
+                  {gesture === '1' && <img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '2' && <img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '3' && <img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '4' && <img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
                   {gesture === 'thumbsUp' && '👍'}
                   {gesture === 'thumbsDown' && '👎'}
                   {gesture === '-' && '—'}
@@ -1598,19 +1602,19 @@ export function LearnDemo() {
                 <h3>Gesture Guide</h3>
                 <div className="guide-items">
                   <div className="guide-item">
-                    <span className="guide-icon">1️⃣</span>
+                    <span className="guide-icon"><img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>1 Finger = Answer A</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon">2️⃣</span>
+                    <span className="guide-icon"><img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>2 Fingers = Answer B</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px' }} /></span>
+                    <span className="guide-icon"><img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>3 Fingers = Answer C</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon">4️⃣</span>
+                    <span className="guide-icon"><img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>4 Fingers = Answer D</span>
                   </div>
                   <div className="guide-item">
@@ -1950,28 +1954,28 @@ export function LearnDemo() {
                       <p className="instructions-title">✋ Answer using gestures:</p>
                       <div className="gesture-instructions-grid">
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">1️⃣</span>
-              <div>
+                          <span className="instruction-icon"><img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
+                          <div>
                             <strong>1 Finger</strong>
                             <span className="instruction-desc">Answer A</span>
-              </div>
+                          </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">2️⃣</span>
+                          <span className="instruction-icon"><img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>2 Fingers</strong>
                             <span className="instruction-desc">Answer B</span>
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                          <span className="instruction-icon"><img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>3 Fingers</strong>
                             <span className="instruction-desc">Answer C</span>
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">4️⃣</span>
+                          <span className="instruction-icon"><img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
               <div>
                             <strong>4 Fingers</strong>
                             <span className="instruction-desc">Answer D</span>

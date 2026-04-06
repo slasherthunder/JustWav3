@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, query as fsQuery, where, limit, getDocs, orderBy, query, addDoc, updateDoc, serverTimestamp, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query as fsQuery, where, limit, getDocs, orderBy, query, addDoc, updateDoc, serverTimestamp, doc, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { Timestamp } from 'firebase/firestore';
@@ -1028,6 +1028,16 @@ export function TeacherHome() {
     }
   }
 
+  async function handleCancelOutgoingConnectionRequest(requestId: string) {
+    try {
+      await deleteDoc(doc(db, 'connectionRequests', requestId));
+      await fetchConnections();
+    } catch (error) {
+      console.error('Error canceling request:', error);
+      alert('Failed to cancel request. Please try again.');
+    }
+  }
+
   async function loadStudentReports(studentUid: string, studentEmail?: string) {
     try {
       setLoadingReports(true);
@@ -1420,6 +1430,17 @@ export function TeacherHome() {
                       <p style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) * var(--text-size-multiplier) * 0.875)', marginTop: 'var(--spacing-xs)' }}>
                         Sent {request.createdAt ? new Date(request.createdAt.seconds * 1000).toLocaleDateString() : 'recently'}
                       </p>
+                      <motion.button
+                        type="button"
+                        onClick={() => handleCancelOutgoingConnectionRequest(request.id)}
+                        className="logout-button"
+                        style={{ marginTop: 'var(--spacing-md)', width: '100%', background: 'var(--text-secondary)' }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        aria-label={`Cancel request to ${request.requestedEmail}`}
+                      >
+                        Cancel request
+                      </motion.button>
                     </motion.div>
                   ))}
                 </div>

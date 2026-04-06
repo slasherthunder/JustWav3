@@ -22,10 +22,25 @@ import threeStickersIcon from "../assets/images/threestickers.png";
 import fourStickersIcon from "../assets/images/fourstickers.png";
 import fiveStickersIcon from "../assets/images/fivestickers.png";
 import sixStickersIcon from "../assets/images/sixstickers.png";
+import oneFingerIcon from '../assets/images/onefinger.png';
+import twoFingersIcon from '../assets/images/twofingers.png';
+import threeFingersIcon from '../assets/images/threefingers.png';
+import fourFingersIcon from '../assets/images/fourfingers.png';
 import { AccessibleAnswer } from '../components/AccessibleAnswer';
 import { StickerProgress } from '../components/StickerProgress';
 
 type LearningMode = 'audio' | 'icons' | 'gesture' | 'simple';
+
+const ALL_LEARNING_MODES: LearningMode[] = ['audio', 'icons', 'gesture', 'simple'];
+
+function normalizeActiveModes(raw: unknown): LearningMode[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [...ALL_LEARNING_MODES];
+  const allowed = raw.filter((m): m is LearningMode =>
+    ALL_LEARNING_MODES.includes(m as LearningMode)
+  );
+  return allowed.length > 0 ? allowed : [...ALL_LEARNING_MODES];
+}
+
 type GestureType = 'open' | 'fist' | 'point' | 'wave' | '1' | '2' | '3' | '4' | 'thumbsUp' | 'thumbsDown' | '-';
 
 interface ModeStats {
@@ -41,6 +56,8 @@ interface ModeStats {
 interface LearnAnswer {
   letter: string;
   value: string;
+  /** Teacher / author option image (Practice assignments); optional in demo questions. */
+  optionImage?: string | null;
 }
 
 interface LearnQuestion {
@@ -49,10 +66,53 @@ interface LearnQuestion {
   hint?: string;
   answers: LearnAnswer[];
   correctAnswers: string[];
+  /** Which modes are available for this question (matches Practice / assignment MCQ). */
+  activeModes?: LearningMode[];
 }
 
 /** Cyan / slate anchors (aligned with Landing brand; scoped via .learn-page-brand) */
 const ANSWER_TILE_COLORS = ['#0891b2', '#0e7490', '#155e75', '#164e63'] as const;
+
+function getSimpleModeOptionImageSrc(ans: { letter: string; optionImage?: string | null }): string {
+  if (ans.optionImage && String(ans.optionImage).trim()) {
+    return String(ans.optionImage).trim();
+  }
+  const L = String(ans.letter).toUpperCase();
+  if (L === 'A') return threeStickersIcon;
+  if (L === 'B') return fourStickersIcon;
+  if (L === 'C') return fiveStickersIcon;
+  return sixStickersIcon;
+}
+
+/** Module-level so hooks do not see a new array reference every render. */
+const LEARN_DEMO_QUESTIONS: LearnQuestion[] = [
+  {
+    text: '12 stickers total → share evenly with 3 students → how many stickers does each student get?',
+    simplifiedText: '12 stickers. 3 friends. How many for each?',
+    hint: 'Try dividing 12 into 3 equal groups.',
+    answers: [
+      { letter: 'A', value: '3' },
+      { letter: 'B', value: '4' },
+      { letter: 'C', value: '5' },
+      { letter: 'D', value: '6' },
+    ],
+    correctAnswers: ['B'],
+    activeModes: normalizeActiveModes(['audio', 'icons', 'gesture', 'simple']),
+  },
+  {
+    text: 'Which of the following are primary colors? (Select all that apply)',
+    simplifiedText: 'Which colors are primary colors? Pick all that are correct.',
+    hint: 'Primary colors mix to make other colors. Green and orange are mixed colors.',
+    answers: [
+      { letter: 'A', value: 'Red' },
+      { letter: 'B', value: 'Green' },
+      { letter: 'C', value: 'Blue' },
+      { letter: 'D', value: 'Orange' },
+    ],
+    correctAnswers: ['A', 'C'],
+    activeModes: normalizeActiveModes(['audio', 'icons', 'gesture', 'simple']),
+  },
+];
 
 export function Learn() {
   const { setNavigating } = useNavigation();
@@ -95,35 +155,9 @@ export function Learn() {
   const [_persistentProfile, setPersistentProfile] = useState<any>(null); // Loaded from Firestore (prefixed with _ to avoid unused warning)
   const [switchReason, setSwitchReason] = useState<string | null>(null); // Track reason for mode switch
   const [showSwitchTooltip, setShowSwitchTooltip] = useState<boolean>(false); // Show "Why am I seeing this?" tooltip
-  
-  // Questions array (simplifiedText = shorter TTS / display for cognitive load)
-  const questions: LearnQuestion[] = [
-    {
-      text: '12 stickers total → share evenly with 3 students → how many stickers does each student get?',
-      simplifiedText: '12 stickers. 3 friends. How many for each?',
-      hint: 'Try dividing 12 into 3 equal groups.',
-      answers: [
-        { letter: 'A', value: '3' },
-        { letter: 'B', value: '4' },
-        { letter: 'C', value: '5' },
-        { letter: 'D', value: '6' }
-      ],
-      correctAnswers: ['B']
-    },
-    {
-      text: 'Which of the following are primary colors? (Select all that apply)',
-      simplifiedText: 'Which colors are primary colors? Pick all that are correct.',
-      hint: 'Primary colors mix to make other colors. Green and orange are mixed colors.',
-      answers: [
-        { letter: 'A', value: 'Red' },
-        { letter: 'B', value: 'Green' },
-        { letter: 'C', value: 'Blue' },
-        { letter: 'D', value: 'Orange' }
-      ],
-      correctAnswers: ['A', 'C']
-    }
-  ];
-  
+
+  const questions = LEARN_DEMO_QUESTIONS;
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const currentQuestion = questions[currentQuestionIndex];
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -134,6 +168,15 @@ export function Learn() {
   /** Shorter copy for TTS and on-screen prompts (falls back to full text). */
   const questionDisplayText = currentQuestion.simplifiedText ?? currentQuestion.text;
   const content = questionDisplayText;
+
+  const availableModes: LearningMode[] =
+    currentQuestion.activeModes?.length ? currentQuestion.activeModes : ALL_LEARNING_MODES;
+
+  useEffect(() => {
+    const q = questions[currentQuestionIndex];
+    if (!q?.activeModes?.length) return;
+    setCurrentMode((prev) => (q.activeModes!.includes(prev) ? prev : q.activeModes![0]));
+  }, [currentQuestionIndex, questions]);
 
   type LearnFlowStep = 'listen' | 'decide';
   const [learnFlowStep, setLearnFlowStep] = useState<LearnFlowStep>('decide');
@@ -678,35 +721,42 @@ export function Learn() {
     }
   }, [successes, attempts, modeStats, currentMode, difficulty]);
 
-  // Auto mode switching based on frustration
+  // Auto mode switching based on frustration (only to modes enabled for this question)
   useEffect(() => {
+    const q = questions[currentQuestionIndex];
+    const allowed = q?.activeModes?.length ? q.activeModes : ALL_LEARNING_MODES;
     const currentFrustration = modeStats[currentMode].frustration;
     const currentInteractions = modeStats[currentMode].interactions;
-    
-    // If frustration spikes in Audio mode (2+ help requests in short time), auto-switch to Icons or Simple
+
     if (currentMode === 'audio' && currentFrustration >= 2 && currentInteractions >= 3 && !autoSwitched) {
-      // Choose between Icons and Simple based on which has lower frustration historically
-      const iconsFrustration = modeStats.icons.frustration;
-      const simpleFrustration = modeStats.simple.frustration;
-      
-      const targetMode = simpleFrustration < iconsFrustration ? 'simple' : 'icons';
+      const canSimple = allowed.includes('simple');
+      const canIcons = allowed.includes('icons');
+      if (!canSimple && !canIcons) return;
+
+      let targetMode: LearningMode;
+      if (canSimple && canIcons) {
+        targetMode =
+          modeStats.simple.frustration < modeStats.icons.frustration ? 'simple' : 'icons';
+      } else {
+        targetMode = canSimple ? 'simple' : 'icons';
+      }
+
       const reason = `We switched to ${targetMode === 'icons' ? 'Icons' : 'Simple'} Mode because you asked for help ${currentFrustration} time${currentFrustration > 1 ? 's' : ''}.`;
-      
+
       console.log(`🔄 Auto-switching from Audio to ${targetMode} due to high frustration (${currentFrustration})`);
       changeMode(targetMode);
       setAutoSwitched(true);
       setSwitchReason(reason);
       setShowSwitchTooltip(true);
       speakText(`Switching to ${targetMode} mode to help you learn better.`);
-      
-      // Hide tooltip after 10 seconds, reset auto-switch flag after 30 seconds
+
       setTimeout(() => setShowSwitchTooltip(false), 10000);
       setTimeout(() => {
         setAutoSwitched(false);
         setSwitchReason(null);
       }, 30000);
     }
-  }, [modeStats, currentMode, autoSwitched]);
+  }, [modeStats, currentMode, autoSwitched, changeMode, questions, currentQuestionIndex]);
 
   const recordSuccess = useCallback(() => {
     const now = Date.now();
@@ -2101,10 +2151,10 @@ export function Learn() {
             <div className="gesture-info">
               <div className="gesture-display">
                 <div className="gesture-icon">
-                  {gesture === '1' && '1️⃣'}
-                  {gesture === '2' && '2️⃣'}
-                  {gesture === '3' && <img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} />}
-                  {gesture === '4' && '4️⃣'}
+                  {gesture === '1' && <img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '2' && <img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '3' && <img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
+                  {gesture === '4' && <img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} />}
                   {gesture === 'thumbsUp' && '👍'}
                   {gesture === 'thumbsDown' && '👎'}
                   {gesture === '-' && '—'}
@@ -2158,19 +2208,19 @@ export function Learn() {
                 <h3>Gesture Guide</h3>
                 <div className="guide-items">
                   <div className="guide-item">
-                    <span className="guide-icon">1️⃣</span>
+                    <span className="guide-icon"><img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>1 Finger = Answer A</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon">2️⃣</span>
+                    <span className="guide-icon"><img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>2 Fingers = Answer B</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                    <span className="guide-icon"><img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>3 Fingers = Answer C</span>
                   </div>
                   <div className="guide-item">
-                    <span className="guide-icon">4️⃣</span>
+                    <span className="guide-icon"><img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                     <span>4 Fingers = Answer D</span>
                   </div>
                   <div className="guide-item">
@@ -2266,6 +2316,7 @@ export function Learn() {
             
             <div className="mode-selector">
               <div className="mode-selector-grid">
+                {availableModes.includes('audio') && (
                 <button 
                   className={`mode-button ${currentMode === 'audio' ? 'active' : ''}`}
                   onClick={() => changeMode('audio')}
@@ -2273,6 +2324,8 @@ export function Learn() {
                   <img src={audioIcon} alt="" className="mode-button-img" width={28} height={28} />
                   Audio
                 </button>
+                )}
+                {availableModes.includes('icons') && (
                 <button 
                   className={`mode-button ${currentMode === 'icons' ? 'active' : ''}`}
                   onClick={() => changeMode('icons')}
@@ -2280,6 +2333,8 @@ export function Learn() {
                   <img src={iconsModeImage} alt="" className="mode-button-img" width={28} height={28} />
                   Icons
                 </button>
+                )}
+                {availableModes.includes('gesture') && (
                 <button 
                   className={`mode-button ${currentMode === 'gesture' ? 'active' : ''}`}
                   onClick={() => changeMode('gesture')}
@@ -2287,6 +2342,8 @@ export function Learn() {
                   <img src={gestureIcon} alt="" className="mode-button-img" width={28} height={28} />
                   Gesture
                 </button>
+                )}
+                {availableModes.includes('simple') && (
                 <button 
                   className={`mode-button ${currentMode === 'simple' ? 'active' : ''}`}
                   onClick={() => changeMode('simple')}
@@ -2294,6 +2351,7 @@ export function Learn() {
                   <img src={simplifyIcon} alt="" className="mode-button-img" width={28} height={28} />
                   Simple
                 </button>
+                )}
             </div>
             </div>
 
@@ -2324,6 +2382,9 @@ export function Learn() {
                       <span>Simple Mode</span>
                     </>
                   )}
+                </span>
+                <span className="mode-indicator-badge" style={{ marginLeft: 'var(--spacing-sm)' }}>
+                  Question {currentQuestionIndex + 1} of {questions.length}
                 </span>
               </div>
               
@@ -2638,28 +2699,28 @@ export function Learn() {
                       <p className="instructions-title">✋ Answer using gestures:</p>
                       <div className="gesture-instructions-grid">
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">1️⃣</span>
+                          <span className="instruction-icon"><img src={oneFingerIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
               <div>
                             <strong>1 Finger</strong>
                             <span className="instruction-desc">Answer A</span>
               </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">2️⃣</span>
+                          <span className="instruction-icon"><img src={twoFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>2 Fingers</strong>
                             <span className="instruction-desc">Answer B</span>
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon"><img src={gestureIcon} alt="" style={{ width: '24px', height: '24px', display: 'inline-block' }} /></span>
+                          <span className="instruction-icon"><img src={threeFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
                           <div>
                             <strong>3 Fingers</strong>
                             <span className="instruction-desc">Answer C</span>
                           </div>
                         </div>
                         <div className="gesture-instruction-item">
-                          <span className="instruction-icon">4️⃣</span>
+                          <span className="instruction-icon"><img src={fourFingersIcon} alt="" style={{ width: '52px', height: '52px', display: 'inline-block', verticalAlign: 'middle' }} /></span>
               <div>
                             <strong>4 Fingers</strong>
                             <span className="instruction-desc">Answer D</span>
@@ -2716,24 +2777,20 @@ export function Learn() {
                       </div>
                     )}
                     <div className="content-card simplified">
-                      {currentQuestionIndex === 0 && (
+                      {currentQuestion.answers.length > 0 && (
                         <div className="simple-mode-sticker-strip" aria-hidden={true}>
-                          <div className="simple-mode-sticker-strip__item">
-                            <img src={threeStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
-                            <span className="simple-mode-sticker-strip__label">A · 3</span>
-                          </div>
-                          <div className="simple-mode-sticker-strip__item">
-                            <img src={fourStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
-                            <span className="simple-mode-sticker-strip__label">B · 4</span>
-                          </div>
-                          <div className="simple-mode-sticker-strip__item">
-                            <img src={fiveStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
-                            <span className="simple-mode-sticker-strip__label">C · 5</span>
-                          </div>
-                          <div className="simple-mode-sticker-strip__item">
-                            <img src={sixStickersIcon} alt="" className="simple-mode-sticker-strip__img" width={80} height={80} />
-                            <span className="simple-mode-sticker-strip__label">D · 6</span>
-                          </div>
+                          {currentQuestion.answers.map((ans) => (
+                            <div key={ans.letter} className="simple-mode-sticker-strip__item">
+                              <img
+                                src={getSimpleModeOptionImageSrc(ans)}
+                                alt=""
+                                className="simple-mode-sticker-strip__img"
+                                width={80}
+                                height={80}
+                              />
+                              <span className="simple-mode-sticker-strip__label">{ans.letter}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                       <p
@@ -2798,15 +2855,7 @@ export function Learn() {
                           const showAsCorrect = isSelected && isCorrect || (Boolean(selectedAnswer) && isCorrect && currentQuestion.correctAnswers.length > 1);
                           const showAsIncorrect = isSelected && !isCorrect;
                           const tileState = showAsCorrect ? 'correct' : showAsIncorrect ? 'incorrect' : 'default';
-                          const stickerForSimple =
-                            ans.letter === 'A'
-                              ? threeStickersIcon
-                              : ans.letter === 'B'
-                                ? fourStickersIcon
-                                : ans.letter === 'C'
-                                  ? fiveStickersIcon
-                                  : sixStickersIcon;
-                          
+
                           return (
                           <AccessibleAnswer
                             key={ans.letter}
@@ -2817,15 +2866,13 @@ export function Learn() {
                             state={tileState}
                             onClick={() => handleAnswerSelection(ans.letter)}
                             visual={
-                              currentQuestionIndex === 0 ? (
-                                <img
-                                  src={stickerForSimple}
-                                  alt=""
-                                  className="simple-mode-answer-sticker-img"
-                                  width={72}
-                                  height={72}
-                                />
-                              ) : undefined
+                              <img
+                                src={getSimpleModeOptionImageSrc(ans)}
+                                alt=""
+                                className="simple-mode-answer-sticker-img"
+                                width={72}
+                                height={72}
+                              />
                             }
                           />
                           );

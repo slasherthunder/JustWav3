@@ -1,7 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
+import { AppAccessibilityProvider } from './contexts/AppAccessibilityContext';
 import { NavigationProvider } from './contexts/NavigationContext';
+import { GlobalAccessibilityControls } from './components/GlobalAccessibilityControls';
 import { PrivateRoute } from './components/PrivateRoute';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
@@ -87,7 +89,10 @@ function App() {
     <Router basename={routerBasename}>
       <NavigationProvider>
         <AuthProvider>
-          <AnimatedRoutes />
+          <AppAccessibilityProvider>
+            <GlobalAccessibilityControls />
+            <AnimatedRoutes />
+          </AppAccessibilityProvider>
         </AuthProvider>
       </NavigationProvider>
     </Router>
