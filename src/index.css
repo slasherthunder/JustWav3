@@ -17,7 +17,7 @@
   --disability-charcoal-light: #6B6C6E;
   --disability-charcoal-dark: #3D3E40;
   
-  /* Primary colors using Disability Pride palette */
+  /* Primary colors — overridden on html to follow accessibility accent */
   --primary-color: var(--disability-blue);
   --primary-hover: #0052a3;
   --primary-focus: #004080;
@@ -72,25 +72,45 @@
   /* Accessibility settings */
   --text-size-multiplier: 1;
   --high-contrast: 0;
+
+  /* GlobalAccessibilityControls (optional overrides) */
+  --a11y-font-size: 100;
+  --a11y-line-spacing: 1.6;
+  --a11y-letter-spacing: 0px;
+  --a11y-word-spacing: 0;
+  --a11y-accent: #0891b2;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html {
+/*
+  html:root beats plain :root from imported page stylesheets (e.g. Landing.css)
+  so accent + primary stay tied to --a11y-accent.
+*/
+html:root {
   font-size: var(--font-size-base);
   -webkit-text-size-adjust: 100%;
   height: 100%;
   width: 100%;
+  --primary-color: var(--a11y-accent, var(--disability-blue));
+  --primary-hover: color-mix(in srgb, var(--a11y-accent, var(--disability-blue)) 85%, #000000);
+  --primary-focus: color-mix(in srgb, var(--a11y-accent, var(--disability-blue)) 72%, #000000);
+  --info-color: var(--a11y-accent, var(--disability-blue));
+  --brand-cyan: var(--a11y-accent, #0891b2);
+  --focus-ring: 3px solid var(--a11y-accent, #6366f1);
 }
 
 body {
   margin: 0;
   padding: 0;
   font-family: var(--font-family);
-  font-size: calc(var(--font-size-base) * var(--text-size-multiplier));
-  line-height: var(--line-height);
+  font-size: calc(
+    var(--font-size-base) * var(--text-size-multiplier) * (var(--a11y-font-size, 100) / 100)
+  );
+  line-height: var(--a11y-line-spacing, var(--line-height));
+  letter-spacing: var(--a11y-letter-spacing, 0px);
   color: var(--text-color);
   background: var(--background);
   -webkit-font-smoothing: antialiased;
@@ -112,9 +132,149 @@ body.high-contrast {
   --text-color: #FFFFFF;
   --background: #000000;
   --primary-color: var(--disability-blue);
+  --text-secondary: #e5e7eb;
   --border-color: #FFFFFF;
-  --surface: #1a1a1a;
-  --glass-bg: rgba(26, 26, 26, 0.95);
+  --surface: #111111;
+  --glass-bg: rgba(0, 0, 0, 0.95);
+  --glass-border: #ffffff;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  /* Landing / brand tokens */
+  --bg-light: #000000;
+  --bg-card: #111111;
+  --text-dark: #ffffff;
+  --text-muted: #e5e7eb;
+  --border-soft: #ffffff;
+}
+
+body.high-contrast,
+body.high-contrast #root {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+/*
+  Color themes: must set the same tokens Landing.css / Messages / Student Home read
+  (higher specificity than :root in those files).
+*/
+html[data-a11y-theme='default'] {
+  --background: #ffffff;
+  --surface: #f5f5f5;
+  --text-color: #000000;
+  --text-secondary: #4a4a4a;
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --border-color: rgba(0, 0, 0, 0.12);
+  --bg-light: #f8fafc;
+  --bg-card: #ffffff;
+  --text-dark: #1a1a1b;
+  --text-muted: rgba(26, 26, 27, 0.72);
+  --border-soft: rgba(15, 23, 42, 0.08);
+}
+
+html[data-a11y-theme='warm'] {
+  --background: #fffbf5;
+  --surface: #fff3e6;
+  --text-color: #1a1410;
+  --text-secondary: #4a4038;
+  --glass-bg: rgba(255, 251, 245, 0.96);
+  --glass-border: rgba(120, 80, 40, 0.14);
+  --border-color: rgba(120, 80, 40, 0.2);
+  --bg-light: #fff7ed;
+  --bg-card: #fffaf0;
+  --text-dark: #1a1410;
+  --text-muted: rgba(74, 64, 56, 0.78);
+  --border-soft: rgba(180, 120, 60, 0.14);
+}
+
+html[data-a11y-theme='cool'] {
+  --background: #f4f9ff;
+  --surface: #e8f2ff;
+  --text-color: #0f172a;
+  --text-secondary: #334155;
+  --glass-bg: rgba(244, 249, 255, 0.96);
+  --glass-border: rgba(30, 64, 120, 0.12);
+  --border-color: rgba(30, 64, 120, 0.2);
+  --bg-light: #eff6ff;
+  --bg-card: #f8fafc;
+  --text-dark: #0f172a;
+  --text-muted: rgba(51, 65, 85, 0.85);
+  --border-soft: rgba(30, 64, 120, 0.14);
+}
+
+/* Landing nav / cards use hardcoded whites — align with theme tokens */
+html[data-a11y-theme='warm'] .glass-nav-light,
+html[data-a11y-theme='cool'] .glass-nav-light,
+html[data-a11y-theme='default'] .glass-nav-light {
+  background: var(--glass-bg);
+  border-color: var(--border-soft);
+}
+
+html[data-a11y-theme='warm'] .landing-wrapper .bento-card,
+html[data-a11y-theme='cool'] .landing-wrapper .bento-card {
+  background: var(--bg-card);
+}
+
+body.high-contrast button,
+body.high-contrast input,
+body.high-contrast textarea,
+body.high-contrast select {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body.high-contrast a {
+  color: #facc15 !important;
+}
+
+body.high-contrast .landing-wrapper.brand-bg-light,
+body.high-contrast .landing-loading-screen.landing-loading-light,
+body.high-contrast .messages-container.landing-wrapper.brand-bg-light {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+body.high-contrast .glass-nav-light,
+body.high-contrast .bento-card,
+body.high-contrast .content-card,
+body.high-contrast .learn-pane--glass {
+  background: #111111 !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* Catch remaining light page surfaces across all routes. */
+body.high-contrast :where(
+  [class*="page"],
+  [class*="wrapper"],
+  [class*="container"],
+  [class*="section"],
+  [class*="surface"],
+  [class*="panel"],
+  [class*="pane"],
+  [class*="card"]
+):not(img):not(svg):not(video):not(canvas):not(iframe) {
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+body.high-contrast :where(
+  [class*="page"],
+  [class*="wrapper"],
+  [class*="container"],
+  [class*="section"],
+  [class*="surface"],
+  [class*="panel"],
+  [class*="pane"],
+  [class*="card"]
+):not(img):not(svg):not(video):not(canvas):not(iframe):not(button):not(input):not(select):not(textarea) {
+  background-color: #000000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
 /* Focus styles - Critical for accessibility */

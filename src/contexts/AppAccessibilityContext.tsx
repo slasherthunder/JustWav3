@@ -9,14 +9,13 @@ import {
 } from 'react';
 import {
   setTTSProvider as applyTtsProvider,
-  getTTSProvider,
   setElevenLabsApiKey,
   getElevenLabsApiKey,
 } from '../utils/ttsService';
 import { syncDocumentAccessibilityFromStorage } from '../accessibility/syncDocumentAccessibility';
 
 export type MessageSpacing = 'compact' | 'comfortable';
-export type ColorTheme = 'default' | 'high-contrast';
+export type ColorTheme = 'default' | 'high-contrast' | 'warm' | 'cool';
 export type FontPreference = 'default' | 'opendyslexic';
 export type ViewMode = 'compact' | 'comfortable';
 export type TtsProviderChoice = 'browser' | 'elevenlabs';
@@ -57,11 +56,18 @@ export function AppAccessibilityProvider({ children }: { children: ReactNode }) 
   });
 
   const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
+    const saved = localStorage.getItem('messages-theme');
+    if (
+      saved === 'default' ||
+      saved === 'high-contrast' ||
+      saved === 'warm' ||
+      saved === 'cool'
+    ) {
+      return saved;
+    }
     const homeHc = localStorage.getItem('home-high-contrast');
     if (homeHc === 'true') return 'high-contrast';
-    if (homeHc === 'false') return 'default';
-    const saved = localStorage.getItem('messages-theme');
-    return saved === 'default' || saved === 'high-contrast' ? saved : 'default';
+    return 'default';
   });
 
   const [fontPreference, setFontPreference] = useState<FontPreference>(() => {
@@ -79,7 +85,10 @@ export function AppAccessibilityProvider({ children }: { children: ReactNode }) 
   const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false);
 
   const [ttsProvider, setTtsProvider] = useState<TtsProviderChoice>(() => {
-    return getTTSProvider() as TtsProviderChoice;
+    const saved = localStorage.getItem('tts-provider');
+    if (saved === 'browser' || saved === 'elevenlabs') return saved;
+    // Default to "disabled" behavior for hover-reader UX.
+    return 'elevenlabs';
   });
 
   const [elevenLabsApiKey, setElevenLabsApiKeyState] = useState<string>(() => {

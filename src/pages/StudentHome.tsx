@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, query, orderBy, Timestamp, query as fsQuery, where, limit, addDoc, serverTimestamp, doc, updateDoc, onSnapshot, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp, query as fsQuery, where, limit, addDoc, serverTimestamp, doc, updateDoc, onSnapshot, getDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { FirebaseError } from 'firebase/app';
 import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
@@ -129,6 +129,8 @@ export function StudentHome() {
   // Assignments state
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [turningInAssignmentIds, setTurningInAssignmentIds] = useState<Record<string, boolean>>({});
+  const [turnedInAssignmentIds, setTurnedInAssignmentIds] = useState<Record<string, boolean>>({});
   
   // Notification counts
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
@@ -391,6 +393,12 @@ export function StudentHome() {
           const studentAssignments = await getAssignmentsByStudent(currentUser.uid);
           console.log('Fetched assignments for student:', studentAssignments.length, studentAssignments);
           setAssignments(studentAssignments);
+          const turnedInMap = studentAssignments.reduce<Record<string, boolean>>((acc, a) => {
+            const submission = (a as any)?.submissions?.[currentUser.uid];
+            acc[a.assignmentId] = Boolean(submission?.turnedInAt);
+            return acc;
+          }, {});
+          setTurnedInAssignmentIds(turnedInMap);
         } catch (queryError: any) {
           // If orderBy fails (likely missing index), try without it
           if (queryError?.code === 'failed-precondition') {
@@ -417,6 +425,12 @@ export function StudentHome() {
           });
           console.log('Fetched assignments (sorted manually):', assignments.length, assignments);
           setAssignments(assignments);
+          const turnedInMap = assignments.reduce<Record<string, boolean>>((acc, a) => {
+            const submission = (a as any)?.submissions?.[currentUser.uid];
+            acc[a.assignmentId] = Boolean(submission?.turnedInAt);
+            return acc;
+          }, {});
+          setTurnedInAssignmentIds(turnedInMap);
         }
       } catch (error: any) {
         console.error('Error fetching assignments:', error);
@@ -430,6 +444,33 @@ export function StudentHome() {
 
     fetchAssignments();
   }, [currentUser]);
+
+  async function handleTurnInAssignment(assignment: Assignment) {
+    if (!currentUser) return;
+    const id = assignment.assignmentId;
+    if (turningInAssignmentIds[id] || turnedInAssignmentIds[id]) return;
+    try {
+      setTurningInAssignmentIds((prev) => ({ ...prev, [id]: true }));
+      await setDoc(
+        doc(db, 'assignments', id),
+        {
+          submissions: {
+            [currentUser.uid]: {
+              turnedInAt: serverTimestamp(),
+              source: 'student_home',
+            },
+          },
+        },
+        { merge: true }
+      );
+      setTurnedInAssignmentIds((prev) => ({ ...prev, [id]: true }));
+    } catch (error) {
+      console.error('Error turning in assignment from student home:', error);
+      alert('Could not turn in this assignment. Please try again.');
+    } finally {
+      setTurningInAssignmentIds((prev) => ({ ...prev, [id]: false }));
+    }
+  }
 
   // Load MCQ set titles for assignments
   useEffect(() => {
@@ -810,27 +851,38 @@ export function StudentHome() {
                           ? { icon: '📅', text: `Due ${dueDate.toLocaleDateString()}`, cls: 'student-adventure-task-row__meta--ok' }
                           : { icon: '📌', text: 'No due date', cls: 'student-adventure-task-row__meta--ok' };
 
+                  const isTurningIn = Boolean(turningInAssignmentIds[assignment.assignmentId]);
+                  const isTurnedIn = Boolean(turnedInAssignmentIds[assignment.assignmentId]);
                   return (
-                    <button
-                      type="button"
-                      key={assignment.assignmentId}
-                      className="student-adventure-task-row"
-                      onClick={() => {
-                        setNavigating(true);
-                        navigate(`/practice?assignmentId=${assignment.assignmentId}`);
-                      }}
-                    >
-                      <div>
-                        <div className="student-adventure-task-row__title">{title}</div>
-                        <div className={`student-adventure-task-row__meta ${dueLine.cls}`}>
-                          <span aria-hidden="true">{dueLine.icon}</span>
-                          <span>{dueLine.text}</span>
+                    <div key={assignment.assignmentId} className="student-adventure-task-row">
+                      <button
+                        type="button"
+                        className="student-adventure-task-row__launch"
+                        onClick={() => {
+                          setNavigating(true);
+                          navigate(`/practice?assignmentId=${assignment.assignmentId}`);
+                        }}
+                      >
+                        <div>
+                          <div className="student-adventure-task-row__title">{title}</div>
+                          <div className={`student-adventure-task-row__meta ${dueLine.cls}`}>
+                            <span aria-hidden="true">{dueLine.icon}</span>
+                            <span>{dueLine.text}</span>
+                          </div>
                         </div>
-                      </div>
-                      <span className="student-adventure-task-row__play" aria-hidden="true">
-                        ▶️
-                      </span>
-                    </button>
+                        <span className="student-adventure-task-row__play" aria-hidden="true">
+                          ▶️
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`student-adventure-task-row__turnin ${isTurnedIn ? 'is-turned-in' : ''}`}
+                        onClick={() => handleTurnInAssignment(assignment)}
+                        disabled={isTurningIn || isTurnedIn}
+                      >
+                        {isTurnedIn ? '✅ Turned In' : isTurningIn ? '📤 Turning In…' : 'Turn In'}
+                      </button>
+                    </div>
                   );
                 })
               )}

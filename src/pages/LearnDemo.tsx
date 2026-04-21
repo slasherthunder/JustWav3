@@ -1265,7 +1265,7 @@ export function LearnDemo() {
 
   return (
     <motion.div 
-      className="learn-container" 
+      className="learn-container learn-demo-container" 
       initial="hidden" 
       animate="visible" 
       variants={containerVariants}

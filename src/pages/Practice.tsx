@@ -77,6 +77,8 @@ export function Practice() {
   const [savingReport, setSavingReport] = useState(false);
   const [reportSaved, setReportSaved] = useState(false);
   const saveInProgressRef = useRef(false);
+  const [turningInAssignment, setTurningInAssignment] = useState(false);
+  const [assignmentTurnedIn, setAssignmentTurnedIn] = useState(false);
   
   // MediaPipe Hands and Webcam states
   const [mpStatus, setMpStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -222,6 +224,9 @@ export function Practice() {
           navigate('/home');
           return;
         }
+
+        const existingSubmission = assignmentData?.submissions?.[currentUser.uid];
+        setAssignmentTurnedIn(Boolean(existingSubmission?.turnedInAt));
 
         const mcqSetId = assignmentData.mcqSetId;
         if (!mcqSetId) {
@@ -380,6 +385,45 @@ export function Practice() {
 
     loadAssignment();
   }, [assignmentId, currentUser, navigate]);
+
+  const turnInAssignment = useCallback(async () => {
+    if (!assignmentId || !currentUser || turningInAssignment || assignmentTurnedIn) return;
+    try {
+      setTurningInAssignment(true);
+      await setDoc(
+        doc(db, 'assignments', assignmentId),
+        {
+          submissions: {
+            [currentUser.uid]: {
+              turnedInAt: serverTimestamp(),
+              attempts,
+              successes,
+              helpCount,
+              currentQuestionIndex,
+              totalQuestions: questions.length,
+            },
+          },
+        },
+        { merge: true }
+      );
+      setAssignmentTurnedIn(true);
+    } catch (error) {
+      console.error('Error turning in assignment:', error);
+      alert('Could not turn in assignment. Please try again.');
+    } finally {
+      setTurningInAssignment(false);
+    }
+  }, [
+    assignmentId,
+    assignmentTurnedIn,
+    attempts,
+    currentQuestionIndex,
+    currentUser,
+    helpCount,
+    questions.length,
+    successes,
+    turningInAssignment,
+  ]);
 
   // Keep current mode within teacher-enabled modes when the question changes
   useEffect(() => {
@@ -3310,6 +3354,19 @@ export function Practice() {
             )}
 
             <div className="session-controls">
+              {assignmentId && (
+                <button
+                  className="end-session-btn"
+                  onClick={turnInAssignment}
+                  disabled={turningInAssignment || assignmentTurnedIn}
+                >
+                  {assignmentTurnedIn
+                    ? '✅ Assignment Turned In'
+                    : turningInAssignment
+                      ? '📤 Turning In Assignment...'
+                      : 'Turn In Assignment'}
+                </button>
+              )}
               <button 
                 className="end-session-btn"
                 onClick={endSession}

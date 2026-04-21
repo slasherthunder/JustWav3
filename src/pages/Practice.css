@@ -1,2 +1,36 @@
 /* Practice shares layout, glass panes, and brand tokens with Learn */
 @import './Learn.css';
+
+/* Explicit practice-side scroll locking to mirror Learn behavior */
+.learn-container {
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.learn-main,
+.learn-main--landing {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.learn-panes {
+  height: 100%;
+  min-height: 0;
+}
+
+.learn-pane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.learn-pane.gesture-pane {
+  overflow-y: auto;
+}
+
+.learn-pane.learning-pane {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}

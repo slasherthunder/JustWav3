@@ -11,8 +11,9 @@
   --sa-gold-soft: rgba(236, 201, 75, 0.15);
   --sa-ink: #1a365d;
   --sa-muted: #718096;
-  --sa-surface: #ffffff;
-  --sa-page: #f0f7ff;
+  /* Page shell follows global theme tokens from index.css (warm/cool/default) */
+  --sa-surface: var(--bg-card, #ffffff);
+  --sa-page: var(--bg-light, #f0f7ff);
   min-height: 100vh;
   background: var(--sa-page);
   color: #2d3748;
@@ -221,6 +222,12 @@
 }
 
 .student-adventure-task-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.65rem;
+}
+
+.student-adventure-task-row__launch {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -235,15 +242,16 @@
   color: inherit;
   min-height: 56px;
   transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  width: 100%;
 }
 
-.student-adventure-task-row:hover {
+.student-adventure-task-row__launch:hover {
   border-color: var(--sa-coral);
   background: #fff5f5;
   transform: scale(1.01);
 }
 
-.student-adventure-task-row:focus-visible {
+.student-adventure-task-row__launch:focus-visible {
   outline: 3px solid #29c5e6;
   outline-offset: 2px;
 }
@@ -278,6 +286,35 @@
 .student-adventure-task-row__play {
   font-size: 1.35rem;
   flex-shrink: 0;
+}
+
+.student-adventure-task-row__turnin {
+  align-self: stretch;
+  min-height: 56px;
+  border-radius: 14px;
+  border: 2px solid rgba(72, 187, 120, 0.45);
+  background: rgba(72, 187, 120, 0.12);
+  color: #22543d;
+  font-weight: 800;
+  font-size: 0.92rem;
+  padding: 0 0.9rem;
+  white-space: nowrap;
+}
+
+.student-adventure-task-row__turnin:hover:not(:disabled) {
+  background: rgba(72, 187, 120, 0.2);
+  transform: translateY(-1px);
+}
+
+.student-adventure-task-row__turnin.is-turned-in {
+  border-color: rgba(66, 153, 225, 0.45);
+  background: rgba(66, 153, 225, 0.15);
+  color: #2a4365;
+}
+
+.student-adventure-task-row__turnin:disabled {
+  opacity: 0.85;
+  cursor: not-allowed;
 }
 
 .student-adventure-empty {

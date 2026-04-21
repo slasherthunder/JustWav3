@@ -75,15 +75,25 @@ export function Landing() {
               >
                 Start Learning Free
               </button>
-              <button
-                type="button"
-                onClick={() => handleAction('/learn-demo')}
-                className="btn-outline-dark-lg"
-              >
-                Watch Demo
-              </button>
             </div>
           </motion.div>
+        </section>
+
+        <section id="landing-demo-video" className="landing-demo-section" aria-labelledby="landing-demo-heading">
+          <h2 id="landing-demo-heading" className="bento-heading-dark landing-demo-heading">
+            Watch the Demo
+          </h2>
+          <div className="landing-demo-embed-wrap">
+            <iframe
+              className="landing-demo-embed"
+              src="https://www.youtube.com/embed/z-pqUpKQSbM"
+              title="JustWav3 product demo"
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          </div>
         </section>
 
         <section className="bento-section" aria-labelledby="bento-heading">

@@ -1,34 +1,436 @@
-/* Floating shell for app-wide accessibility (same controls as Messages) */
+/* ─────────────────────────────────────────────────────────────────────────────
+   GlobalAccessibility.css
+   Floating shell + panel styles for app-wide accessibility controls.
+   Custom-property hooks are written by GlobalAccessibilityControls.tsx.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Root shell ─────────────────────────────────────────────────────────────── */
 .global-a11y-root {
   position: fixed;
   bottom: max(12px, env(safe-area-inset-bottom));
-  right: max(12px, env(safe-area-inset-right));
+  left: max(12px, env(safe-area-inset-left));
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  max-width: min(420px, calc(100vw - 24px));
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(860px, calc(100vw - 24px));
 }
 
-.global-a11y-panel.accessibility-settings-panel {
+/* ── Trigger button ─────────────────────────────────────────────────────────── */
+.global-a11y-toggle {
   position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(
+    135deg,
+    var(--a11y-accent, #0891b2),
+    color-mix(in srgb, var(--a11y-accent, #0891b2) 80%, #000)
+  );
+  color: #fff;
+  font-size: 1.3rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--a11y-accent, #0891b2) 40%, transparent);
+  transition: box-shadow 0.2s;
+  align-self: flex-start;
+}
+
+.global-a11y-toggle:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 2px;
+}
+
+/* Active-setting badge */
+.a11y-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #facc15;
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  pointer-events: none;
+}
+
+/* ── Panel ──────────────────────────────────────────────────────────────────── */
+.global-a11y-panel.accessibility-settings-panel {
+  position: fixed;
   top: auto;
   right: auto;
-  min-width: min(320px, 100%);
-  max-width: 100%;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 60px);
+  left: max(12px, env(safe-area-inset-left));
+  /* Explicit max-width so legacy Messages.css (or other sheets) cannot cap at 400px */
+  width: min(860px, calc(100vw - 24px));
+  max-width: min(860px, calc(100vw - 24px));
+  max-height: calc(100vh - max(12px, env(safe-area-inset-bottom)) - 84px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 0;
-  order: -1;
-}
-
-.global-a11y-quick-bar.messages-a11y-quick-bar {
-  width: 100%;
-  max-width: 100%;
-  margin: 0;
-  border-radius: 12px;
+  padding: 0 36px 48px 36px;
+  border-radius: 24px;
+  background: #ffffff;
+  color: var(--color-text-primary, #1a1a1b);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
+  z-index: 10001;
   box-sizing: border-box;
 }
 
-.global-a11y-toggle {
-  align-self: flex-end;
+/* ── Panel header ───────────────────────────────────────────────────────────── */
+.accessibility-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0 12px;
+  border-bottom: 0.5px solid var(--color-border-tertiary, rgba(0, 0, 0, 0.08));
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+
+.accessibility-settings-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  padding: 10px 0;
+  color: var(--color-text-primary, var(--text-color));
+  margin: 0;
+}
+
+.accessibility-settings-header > button {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 0.5px solid var(--color-border-tertiary, rgba(0, 0, 0, 0.1));
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--color-text-secondary, var(--text-secondary));
+  transition: background 0.1s;
+}
+
+.accessibility-settings-header > button:hover {
+  background: var(--color-background-secondary, var(--surface));
+}
+
+/* ── Quick action bar ───────────────────────────────────────────────────────── */
+.messages-a11y-quick-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 20px 0;
+  border-bottom: 0.5px solid var(--color-border-tertiary, rgba(0, 0, 0, 0.08));
+}
+
+.messages-a11y-quick-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 45px;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 99px;
+  border: 0.5px solid var(--color-border-secondary, rgba(0, 0, 0, 0.15));
+  background: var(--color-background-secondary, var(--surface));
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-secondary, var(--text-secondary));
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: normal;
+  text-align: center;
+}
+
+.messages-a11y-quick-bar__btn:hover {
+  border-color: var(--a11y-accent, #0891b2);
+  color: var(--a11y-accent, #0891b2);
+}
+
+.messages-a11y-quick-bar__btn.is-active {
+  background: color-mix(in srgb, var(--a11y-accent, #0891b2) 12%, transparent);
+  border-color: var(--a11y-accent, #0891b2);
+  color: var(--a11y-accent, #0891b2);
+  font-weight: 500;
+}
+
+/* ── Settings content ───────────────────────────────────────────────────────── */
+.accessibility-settings-content {
+  padding: 6px 0 12px;
+}
+
+.setting-group {
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting-group > label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary, #9ca3af);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.setting-val {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--a11y-accent, #0891b2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.setting-options {
+  display: grid;
+  /* Min column width keeps labels readable; extra columns only when panel is wide enough */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.setting-option {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 68px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 0.5px solid var(--color-border-secondary, rgba(0, 0, 0, 0.12));
+  background: var(--color-background-secondary, var(--surface));
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-secondary, var(--text-secondary));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: manual;
+  text-align: center;
+  transition: all 0.12s;
+  box-sizing: border-box;
+}
+
+.setting-option:hover {
+  border-color: var(--a11y-accent, #0891b2);
+  color: var(--a11y-accent, #0891b2);
+}
+
+.setting-option:focus-visible {
+  outline: 3px solid var(--a11y-accent, #0891b2);
+  outline-offset: 2px;
+}
+
+.setting-option.active {
+  background: color-mix(in srgb, var(--a11y-accent, #0891b2) 12%, transparent);
+  border-color: var(--a11y-accent, #0891b2);
+  color: var(--a11y-accent, #0891b2);
+  font-weight: 600;
+}
+
+/* ── Sliders ────────────────────────────────────────────────────────────────── */
+.a11y-slider {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--a11y-accent, #0891b2);
+  cursor: pointer;
+}
+
+/* ── Color swatches ─────────────────────────────────────────────────────────── */
+.a11y-swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.a11y-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s;
+  padding: 0;
+}
+
+.a11y-swatch:hover {
+  transform: scale(1.15);
+}
+
+.a11y-swatch.active {
+  outline: 2px solid var(--a11y-accent, #0891b2);
+  outline-offset: 2px;
+}
+
+/* ── Divider ────────────────────────────────────────────────────────────────── */
+.setting-divider {
+  height: 0.5px;
+  background: var(--color-border-tertiary, rgba(0, 0, 0, 0.08));
+  margin: 4px 0;
+}
+
+/* ── Toggle rows ────────────────────────────────────────────────────────────── */
+.a11y-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+}
+
+.a11y-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.a11y-toggle-title {
+  font-size: 13px;
+  color: var(--color-text-primary, var(--text-color));
+}
+
+.a11y-toggle-desc {
+  font-size: 11px;
+  color: var(--color-text-secondary, var(--text-secondary));
+}
+
+/* Toggle switch */
+.a11y-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.a11y-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.a11y-switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--color-border-secondary, rgba(0, 0, 0, 0.2));
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+
+.a11y-switch-track::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.a11y-switch input:checked + .a11y-switch-track {
+  background: var(--a11y-accent, #0891b2);
+}
+
+.a11y-switch input:checked + .a11y-switch-track::after {
+  transform: translateX(18px);
+}
+
+.a11y-switch input:focus-visible + .a11y-switch-track {
+  outline: 3px solid #facc15;
+  outline-offset: 2px;
+}
+
+/* ── Status bar ─────────────────────────────────────────────────────────────── */
+.a11y-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary, var(--text-secondary));
+}
+
+.a11y-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+}
+
+/* Body-class rules (only when toggled on) */
+.a11y-reduce-motion *,
+.a11y-reduce-motion *::before,
+.a11y-reduce-motion *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+.a11y-no-focus-ring *:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.a11y-large-cursor,
+.a11y-large-cursor * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24'%3E%3Cpath d='M4 0l16 12-7 2-4 9z' fill='%23333' stroke='%23fff' stroke-width='1'/%3E%3C/svg%3E")
+      0 0,
+    auto;
+}
+
+.a11y-word-spacing p,
+.a11y-word-spacing li,
+.a11y-word-spacing span {
+  word-spacing: var(--a11y-word-spacing, 0);
+}
+
+body.a11y-focus-mode #root {
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.12);
+}
+
+html[data-a11y-density='compact'] {
+  --spacing-xs: 0.35rem;
+  --spacing-sm: 0.65rem;
+  --spacing-md: 1.1rem;
+  --spacing-lg: 1.5rem;
+}
+
+html[data-a11y-density='spacious'] {
+  --spacing-xs: 0.65rem;
+  --spacing-sm: 1.15rem;
+  --spacing-md: 1.85rem;
+  --spacing-lg: 2.6rem;
+}
+
+html[data-a11y-font-style='serif'] body {
+  font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+}
+
+html[data-a11y-font-style='mono'] body {
+  font-family: var(--font-mono);
 }

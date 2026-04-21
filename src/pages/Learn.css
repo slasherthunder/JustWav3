@@ -11,9 +11,9 @@
   z-index: 1;
 }
 
-/* Match Landing: cyan accent + light slate (scoped so Landing.css variables apply) */
+/* Match Landing: accent follows global accessibility picker */
 .learn-page-brand {
-  --brand-cyan: #0891b2;
+  --brand-cyan: var(--a11y-accent, #0891b2);
 }
 
 .learn-top-nav {
@@ -1488,5 +1488,189 @@
   .mode-selector-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+}
+
+/* ─── Question/Answer layout fix ────────────────────────────────────────────
+   Problem: the right pane (.learning-pane) stacks everything in normal flow,
+   forcing the user to scroll past the mode-selector and heading before they
+   reach answers.  Fix: make the pane a flex column, let the content area
+   expand to fill remaining height, and keep the answer list scrollable only
+   inside its own region (not the whole page).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* 1. The two-pane wrapper: both panes fill the viewport height */
+.learn-panes {
+  align-items: stretch;          /* panes grow to the same height         */
+}
+
+/* 2. Right pane: flex column so content-display can flex-grow */
+.learn-pane.learning-pane {
+  display: flex;
+  flex-direction: column;
+  /* Prevent the pane itself from growing taller than the viewport */
+  max-height: calc(100vh - 72px); /* 72px = approximate nav height        */
+  overflow: hidden;
+}
+
+/* 3. Mode selector: never grows, never shrinks — fixed height at top */
+.mode-selector {
+  flex-shrink: 0;
+}
+
+/* 4. content-display: takes all remaining vertical space */
+.content-display {
+  flex: 1 1 0;
+  min-height: 0;          /* CRITICAL: allows flex child to shrink below content height */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 5. mode-content: fills content-display and scrolls internally */
+.mode-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* Smooth scroll with a little padding so content doesn't hug edges */
+  padding-bottom: 0.5rem;
+  /* Thin, unobtrusive scrollbar on WebKit */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.15) transparent;
+}
+.mode-content::-webkit-scrollbar { width: 4px; }
+.mode-content::-webkit-scrollbar-track { background: transparent; }
+.mode-content::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.18);
+  border-radius: 4px;
+}
+
+/* 6. The inner mode divs (audio-mode, icons-mode, etc.) */
+.audio-mode,
+.icons-mode,
+.gesture-mode,
+.simple-mode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+}
+
+/* 7. content-card: the question + answers wrapper.
+      Remove any min-height and let it use natural height. */
+.content-card {
+  min-height: unset !important;
+}
+
+/* 8. answer-choices: never crops but doesn't force a minimum height */
+.answer-choices {
+  min-height: unset !important;
+}
+
+/* 9. Switch-tooltip, mode-indicator, heading: don't flex-grow */
+.learn-content-heading,
+.mode-indicator,
+.switch-tooltip {
+  flex-shrink: 0;
+}
+
+/* 10. Action buttons + session controls: pinned below, never hidden */
+.action-buttons,
+.session-controls,
+.check-in {
+  flex-shrink: 0;
+}
+
+/* ─── Compact question text so it fits without truncation ─────────────────── */
+
+/* Reduce the oversized question font slightly so 2-line questions still fit */
+.content-text {
+  font-size: clamp(0.95rem, 2.2vw, 1.15rem) !important;
+  line-height: 1.45 !important;
+  margin-bottom: 0.75rem !important;
+}
+
+/* Tighten answer tile height so 4 choices fit without scrolling */
+/* AccessibleAnswer renders a .accessible-answer element */
+.accessible-answer {
+  padding-top: 0.6rem !important;
+  padding-bottom: 0.6rem !important;
+  min-height: unset !important;
+}
+
+/* Icons-mode: sticker images — smaller so 4 tiles fit in 2×2 grid */
+.icons-mode-sticker-img {
+  width: 72px !important;
+  height: 72px !important;
+}
+
+/* Simple-mode: sticker images */
+.simple-mode-answer-sticker-img {
+  width: 52px !important;
+  height: 52px !important;
+}
+
+/* Simple-mode sticker strip above the question */
+.simple-mode-sticker-strip {
+  gap: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+.simple-mode-sticker-strip__img {
+  width: 52px !important;
+  height: 52px !important;
+}
+
+/* ─── Responsive fallback: on small screens allow full scroll again ────────── */
+@media (max-height: 600px) {
+  .learn-pane.learning-pane {
+    max-height: none;
+    overflow: visible;
+  }
+  .content-display,
+  .mode-content {
+    overflow: visible;
+  }
+}
+
+/* ─── Hard lock outer-page scrolling (desktop/tablet) ─────────────────────── */
+.learn-container {
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.learn-main,
+.learn-main--landing {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.learn-panes {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Base panes should not create an extra scroll layer. */
+.learn-pane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Left pane can scroll internally for long gesture guides. */
+.learn-pane.gesture-pane {
+  overflow-y: auto;
+}
+
+/* Right pane scroll is delegated to .mode-content only. */
+.learn-pane.learning-pane {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+/* Explicit tutorial (LearnDemo) lock so behavior stays identical even if base
+   selectors change later. */
+.learn-demo-container {
+  height: 100vh !important;
+  overflow: hidden !important;
 }
 
